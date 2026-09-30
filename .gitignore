@@ -1,0 +1,4 @@
+.test-cache/
+__pycache__/
+*.pyc
+payload/files/aria2c

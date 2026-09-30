@@ -1,0 +1,54 @@
+/* Plugin-scoped CSS: never style the Xiaomi client host document. */
+[data-minas-plugin="downloadcenter"].desktop-client{--bg: #eef1f5; --background: #eef1f5; --surface: #fff; --surface-solid: #fff; --text: #243044; --muted: #596579; --line: #d5dce5; --sidebar: #e5eaf0; --shadow: 0 10px 30px rgba(36, 48, 68, .07); background: var(--bg);}
+[data-minas-plugin="downloadcenter"].desktop-client .minas-plugin-body, [data-minas-plugin="downloadcenter"].desktop-client .desktop-frame{background: var(--bg);}
+[data-minas-plugin="downloadcenter"].desktop-client .topbar, [data-minas-plugin="downloadcenter"].desktop-client .section-heading, [data-minas-plugin="downloadcenter"].desktop-client .hero-copy{color: var(--text);}
+[data-minas-plugin="downloadcenter"].desktop-client .topbar .eyebrow, [data-minas-plugin="downloadcenter"].desktop-client .section-heading p, [data-minas-plugin="downloadcenter"].desktop-client .shell > footer{color: var(--muted);}
+[data-minas-plugin="downloadcenter"].desktop-client .hero-copy{--muted: #596579;}
+[data-minas-plugin="downloadcenter"].desktop-client .topbar .icon-button{color: var(--text); background: var(--surface); border-color: var(--line);}
+[data-minas-plugin="downloadcenter"].desktop-client .tabs, [data-minas-plugin="downloadcenter"].desktop-client .desktop-frame > .tabs{background: var(--sidebar); border-color: var(--line); box-shadow: none; backdrop-filter: none;}
+[data-minas-plugin="downloadcenter"].desktop-client .tabs .tab{color: var(--muted);}
+[data-minas-plugin="downloadcenter"].desktop-client .tabs .tab.active, [data-minas-plugin="downloadcenter"].desktop-client .desktop-frame > .tabs .tab.active{color: var(--purple-dark, var(--teal-dark, var(--green-dark, var(--blue-dark, var(--accent, #243044))))); background: var(--surface); box-shadow: rgba(36, 48, 68, 0.06) 0px 2px 6px;}
+[data-minas-plugin="downloadcenter"].desktop-client .panel, [data-minas-plugin="downloadcenter"].desktop-client .metric, [data-minas-plugin="downloadcenter"].desktop-client .metric-card, [data-minas-plugin="downloadcenter"].desktop-client .disk-card, [data-minas-plugin="downloadcenter"].desktop-client .share-card, [data-minas-plugin="downloadcenter"].desktop-client .hero-card{border-color: var(--line);}
+[data-minas-plugin="downloadcenter"].desktop-client .hero-card, [data-minas-plugin="downloadcenter"].desktop-client .hero:not(header){background: var(--surface);}
+@media (prefers-color-scheme: light), (prefers-color-scheme: no-preference) {[data-minas-plugin="downloadcenter"]:not(.desktop-client){--bg: #eef1f5; --background: #eef1f5; --surface: #fff; --surface-solid: #fff; --text: #243044; --muted: #596579; --line: #d5dce5; --sidebar: #e5eaf0; --shadow: 0 10px 30px rgba(36, 48, 68, .07); background: var(--bg);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .minas-plugin-body, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .desktop-frame{background: var(--bg);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .topbar, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .section-heading, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .hero-copy{color: var(--text);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .topbar .eyebrow, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .section-heading p, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .shell > footer{color: var(--muted);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .hero-copy{--muted: #596579;}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .topbar .icon-button{color: var(--text); background: var(--surface); border-color: var(--line);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .tabs, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .desktop-frame > .tabs{background: var(--sidebar); border-color: var(--line); box-shadow: none; backdrop-filter: none;}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .tabs .tab{color: var(--muted);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .tabs .tab.active, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .desktop-frame > .tabs .tab.active{color: var(--purple-dark, var(--teal-dark, var(--green-dark, var(--blue-dark, var(--accent, #243044))))); background: var(--surface); box-shadow: rgba(36, 48, 68, 0.06) 0px 2px 6px;}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .panel, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .metric, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .metric-card, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .disk-card, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .share-card, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .hero-card{border-color: var(--line);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .hero-card, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .hero:not(header){background: var(--surface);}}
+[data-minas-plugin="downloadcenter"].desktop-client{color-scheme: light;}
+@media (prefers-color-scheme: dark) {[data-minas-plugin="downloadcenter"]:not(.desktop-client){color-scheme: dark; --disabled-bg: #303a46; --disabled-text: #acb9c9; --disabled-border: #485563;}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client), [data-minas-plugin="downloadcenter"]:not(.desktop-client) .minas-plugin-body{background: var(--bg);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .topbar, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .section-heading{color: var(--text);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .topbar .eyebrow, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .section-heading p, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .shell > footer{color: var(--muted);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .topbar .icon-button{color: var(--text); background: var(--surface); border-color: var(--line);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .tabs{background: var(--surface); border-color: var(--line); box-shadow: none; backdrop-filter: none;}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .tabs .tab{color: var(--muted);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .tabs .tab.active{color: var(--purple-dark, var(--teal-dark, var(--green-dark, var(--blue-dark, var(--accent, #e6edf5))))); background: var(--purple-soft, var(--teal-soft, var(--green-soft, var(--blue-soft, var(--soft, #243140))))); box-shadow: none;}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .panel, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .metric, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .metric-card, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .resource-card, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .disk-card, [data-minas-plugin="downloadcenter"]:not(.desktop-client) .share-card{border-color: var(--line);}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) input::placeholder, [data-minas-plugin="downloadcenter"]:not(.desktop-client) textarea::placeholder{color: var(--muted); opacity: 1;}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) input{accent-color: var(--purple-dark, var(--teal-dark, var(--green-dark, var(--blue-dark, var(--accent, #e6edf5)))));}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .minas-plugin-body button:disabled{color: var(--disabled-text) !important; background: var(--disabled-bg) !important; border-color: var(--disabled-border) !important; opacity: 1 !important;}}
+@media (prefers-color-scheme: dark) {[data-minas-plugin="downloadcenter"]:not(.desktop-client) .badge.enabled{color: rgb(121, 222, 176); background: rgb(24, 59, 48);}}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body{font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Roboto, sans-serif; font-size: 15px; -webkit-font-smoothing: auto;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body .shell{font-size: 15px;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body :is(p, .field-note, .field-label, .field-title, .form-body legend, .form-body label span, .form-grid label > span, .selected-path, .security-note, .warning-note, .empty-state, .loading){font-size: 14px; line-height: 1.65;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body :is(h1, h2, h3){font-weight: 700;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body :is(.field-label, .field-title, .form-grid label > span){font-weight: 600;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body button:not(.icon-button):not(.close-button):not(.dialog-close), [data-minas-plugin="downloadcenter"] .minas-plugin-body :is(.share-actions a, .button){font-family: inherit; font-size: 14px; font-weight: 600; line-height: 1.45;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]){font-family: inherit; font-size: 16px; font-weight: 400;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body :is(input, textarea)::placeholder{color: var(--muted); opacity: 1;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body :is(.badge, .status-pill){font-size: 12px; font-weight: 600; line-height: 1.5;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body :is(.chip, .meta-chip, .file-copy span, .detail-item span, .metric-card span, .metric span, .eyebrow, footer), [data-minas-plugin="downloadcenter"].desktop-client .shell :is(.chip, .meta-chip, .detail-item span, .metric-card span, .eyebrow, .field-note, footer){font-size: 13px; line-height: 1.6;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body :is(.eyebrow, .chip, .meta-chip){font-weight: 500;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body :is(pre, code, #logText, #cleanupSamples){font-family: ui-monospace, "Cascadia Mono", Consolas, "Noto Sans Mono CJK SC", monospace; font-size: 13px; line-height: 1.7;}
+[data-minas-plugin="downloadcenter"].desktop-client{--text: #1f2b3d; --muted: #4b596d;}
+[data-minas-plugin="downloadcenter"].desktop-client .hero-copy{--muted: #4b596d;}
+@media (prefers-color-scheme: light), (prefers-color-scheme: no-preference) {[data-minas-plugin="downloadcenter"]:not(.desktop-client){--text: #1f2b3d; --muted: #4b596d;}
+[data-minas-plugin="downloadcenter"]:not(.desktop-client) .hero-copy{--muted: #4b596d;}}
+@media (prefers-color-scheme: dark) {[data-minas-plugin="downloadcenter"]:not(.desktop-client){--text: #edf2f8; --muted: #b8c4d3;}}

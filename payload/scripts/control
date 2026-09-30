@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+USER_NAME=$(printf '%s\n' "$SCRIPT_DIR" | sed -n 's#^/home/\(u[0-9][0-9]*\)/plugin/downloadcenter/scripts$#\1#p')
+[ -n "$USER_NAME" ] || { echo '插件路径无效' >&2; exit 1; }
+HOME_DIR="/home/$USER_NAME/plugin/downloadcenter"
+case "${1:-}" in start|enable|ensure|postinstall|postupgrade|stop|disable|preuninstall|preupgrade|status) ;; *) exit 0;; esac
+if [ "$(id -u)" = 0 ]; then
+    exec runuser -u "$USER_NAME" -- /usr/bin/python3 -B "$HOME_DIR/src/files/service.py" "$1" "$HOME_DIR"
+fi
+[ "$(id -un)" = "$USER_NAME" ] || exit 1
+exec /usr/bin/python3 -B "$HOME_DIR/src/files/service.py" "$1" "$HOME_DIR"

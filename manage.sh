@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='downloadcenter'
 PLUGIN_LABEL='下载中心'
-PLUGIN_VERSION='1.0.7'
+PLUGIN_VERSION='1.0.8'
 UNINSTALL_NOTE='停止所选用户下载服务；配置、种子和任务记录先备份。已下载及未完成文件均保留，不影响其他用户。'
 
 # Common installation flow adapted from the existing standalone plugins.
@@ -499,7 +499,7 @@ chmod 0700 "$HOME_DIR" "$VAR"; chmod 0600 "$VAR/"*.port "$VAR/rpc.secret"
 now=$(date +%s); size=$(du -sk "$SRC" | awk '{print $1*1024}')
 abstract=$(sha256sum "$SRC/files/download_lib.py" | cut -d ' ' -f 1)
 jq -n --arg v "$PLUGIN_VERSION" --arg a "$abstract" --argjson t "$now" --argjson s "$size" \
-'{plugin:"downloadcenter",name:"下载中心",id:19096,version:$v,tags:["tool"],timestamp:$t,desc:"直链、磁链、BT 与 Tracker 管理",developer:"Local",publisher:"Local",changelog:"第一版下载中心",system:false,size:$s,type:"standard",forceupgrade:false,ext:{admin:true},hotplug:["net"],abstract:$a}' > "$HOME_DIR/INFO"
+'{plugin:"downloadcenter",name:"下载中心",id:19096,version:$v,tags:["tool"],timestamp:$t,desc:"直链、磁链、BT 与 Tracker 管理",developer:"Local",publisher:"Local",changelog:"统一六插件视觉规范、全宽桌面布局、手机深色主题与样式隔离",system:false,size:$s,type:"standard",forceupgrade:false,ext:{admin:true},hotplug:["net"],abstract:$a}' > "$HOME_DIR/INFO"
 rm -f "$WEB_LINK"; ln -s "$SRC/ui" "$WEB_LINK"
 python3 "$PAYLOAD/make_icon.py" "$ICON"; chmod 0644 "$ICON"
 entry="$TMP/entry.$$"

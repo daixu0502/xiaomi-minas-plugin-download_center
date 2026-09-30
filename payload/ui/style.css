@@ -41,10 +41,7 @@
 [data-minas-plugin="downloadcenter"] .badge.failed{color: var(--red); background: rgba(191, 54, 70, 0.1);}
 [data-minas-plugin="downloadcenter"] .page{display: none; min-width: 0px;}
 [data-minas-plugin="downloadcenter"] .page.active{display: block;}
-[data-minas-plugin="downloadcenter"] .metrics article, [data-minas-plugin="downloadcenter"] .panel, [data-minas-plugin="downloadcenter"] .task-card{border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow);}
-[data-minas-plugin="downloadcenter"] .metrics article{padding: 14px;}
-[data-minas-plugin="downloadcenter"] .metrics span{font-size: 11px; color: var(--muted);}
-[data-minas-plugin="downloadcenter"] .metrics strong{display: block; margin-top: 8px; font-size: 27px;}
+[data-minas-plugin="downloadcenter"] .panel, [data-minas-plugin="downloadcenter"] .task-card{border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow);}
 [data-minas-plugin="downloadcenter"] .panel, [data-minas-plugin="downloadcenter"] .task-card{padding: 18px; margin-bottom: 12px; min-width: 0px;}
 [data-minas-plugin="downloadcenter"] .panel > p{margin-top: 10px;}
 [data-minas-plugin="downloadcenter"] .welcome h2{margin: 6px 0px 10px;}
@@ -114,7 +111,6 @@
 [data-minas-plugin="downloadcenter"] .icon-button{display: grid; place-items: center; color: var(--text); background: var(--surface);}
 [data-minas-plugin="downloadcenter"] button.primary{background: rgb(37, 99, 201); border-color: rgb(37, 99, 201);}
 [data-minas-plugin="downloadcenter"] .muted{color: var(--muted); font-size: 13px;}
-[data-minas-plugin="downloadcenter"] .metrics strong{font-size: clamp(18px, 2.2vw, 26px); overflow-wrap: anywhere;}
 [data-minas-plugin="downloadcenter"] .button-row, [data-minas-plugin="downloadcenter"] .filter{display: flex; gap: 8px; align-items: center; flex-wrap: wrap;}
 [data-minas-plugin="downloadcenter"] .search{display: grid; gap: 10px; margin-bottom: 16px;}
 [data-minas-plugin="downloadcenter"] .search input, [data-minas-plugin="downloadcenter"] .folder-create input{font: inherit; min-width: 0px; width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: var(--surface);}

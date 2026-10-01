@@ -30,6 +30,12 @@ class DownloadError(Exception):
     pass
 
 
+def core_path(m):
+    # Updated binaries are runtime state, outside plugin.sh's immutable src tree.
+    updated = m.var / 'core/aria2c'
+    return updated if updated.is_file() else m.home / 'src/files/aria2c'
+
+
 def atomic_json(path, data):
     temp = path.with_name(path.name + "." + secrets.token_hex(6))
     try:

@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 from urllib.request import Request, ProxyHandler, build_opener
 
-from download_lib import DownloadError, atomic_json
+from download_lib import DownloadError, atomic_json, core_path
 from fetch_core import ASSETS
 
 REPOSITORY = 'abcfy2/aria2-static-build'
@@ -117,13 +117,14 @@ def wait_running(m, expected):
 
 def install_candidate(m, candidate, version):
     from service import control_locked, live
-    target = m.home / 'src/files/aria2c'
-    # Staging and rollback alongside target makes os.replace atomic even if var
-    # and src reside on different NAS filesystems.
+    target = m.var / 'core/aria2c'
+    target.parent.mkdir(mode=0o700, exist_ok=True)
+    # Never modify src: firmware verifies it at boot and uninstalls on mismatch.
+    # Staging and rollback stay on the runtime filesystem for atomic replacement.
     with tempfile.TemporaryDirectory(prefix='.core-update-', dir=target.parent) as folder:
         pending, previous = Path(folder)/'aria2c.new', Path(folder)/'aria2c.previous'
         shutil.copy2(candidate, pending)
-        shutil.copy2(target, previous)
+        shutil.copy2(core_path(m), previous)
         old_version = binary_version(previous)
         with (m.var/'lifecycle.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -182,7 +183,7 @@ def run(m, command, proxy):
         common = {'command': command, 'proxy': proxy}
         try:
             write_state(m, **common, state='checking', message='正在检查静态核心发布版本…')
-            current = binary_version(m.home/'src/files/aria2c')
+            current = binary_version(core_path(m))
             info = release(proxy)
             available = version_tuple(info['latest']) > version_tuple(current)
             common.update(current=current, latest=info['latest'], updateAvailable=available)

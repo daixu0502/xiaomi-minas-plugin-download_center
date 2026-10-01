@@ -497,7 +497,7 @@ ln -s "$SRC" "$HOME_DIR/src"; ln -s "$TMP" "$HOME_DIR/tmp"
 if [ ! -s "$VAR/rpc.secret" ]; then python3 -c 'import secrets,sys;open(sys.argv[1],"w").write(secrets.token_hex(32))' "$VAR/rpc.secret"; fi
 chmod 0700 "$HOME_DIR" "$VAR"; chmod 0600 "$VAR/"*.port "$VAR/rpc.secret"
 now=$(date +%s); size=$(du -sk "$SRC" | awk '{print $1*1024}')
-abstract=$(sha256sum "$SRC/files/download_lib.py" | cut -d ' ' -f 1)
+abstract=$(python3 -B "$SRC/files/integrity.py" "$SRC")
 jq -n --arg v "$PLUGIN_VERSION" --arg a "$abstract" --argjson t "$now" --argjson s "$size" \
 '{plugin:"downloadcenter",name:"下载中心",id:19096,version:$v,tags:["tool"],timestamp:$t,desc:"直链、磁链、BT 与 Tracker 管理",developer:"Local",publisher:"Local",changelog:"统一六插件视觉规范、全宽桌面布局、手机深色主题与样式隔离",system:false,size:$s,type:"standard",forceupgrade:false,ext:{admin:true},hotplug:["net"],abstract:$a}' > "$HOME_DIR/INFO"
 rm -f "$WEB_LINK"; ln -s "$SRC/ui" "$WEB_LINK"
@@ -506,7 +506,8 @@ entry="$TMP/entry.$$"
 jq -n --slurpfile f "$SRC/ui/config" --slurpfile i "$HOME_DIR/INFO" --argjson now "$now" --argjson enable "$WAS_ENABLED" \
 '{resource:{mpk:"",icon:"",preview:null},status:(if $enable then "running" else "stopped" end),install:true,upgrade:false,enable:$enable,changetime:$now,icon:"/icon/downloadcenter.icon",progress:"100",frontend:$f[0],info:($i[0]|del(.abstract)),online:true}' > "$entry"
 exec 9>"/data/plugin/.$USER_NAME.plugins.lock"; flock -x 9
-cp -p "$NAS_LIST" "$NAS_LIST.pre-downloadcenter.$now"
+registry_backup="$TMP/registry-before-install.$$"
+cp -p "$NAS_LIST" "$registry_backup"
 next="$NAS_LIST.downloadcenter.$$"
 jq --slurpfile e "$entry" '.downloadcenter=$e[0]' "$NAS_LIST" > "$next"
 chmod --reference="$NAS_LIST" "$next"; chown --reference="$NAS_LIST" "$next"; mv "$next" "$NAS_LIST"
@@ -514,6 +515,10 @@ flock -u 9; rm -f "$entry"
 chown -R "$USER_NAME:$(id -gn "$USER_NAME")" "$HOME_DIR" "$SRC" "$TMP"
 chown -h "$USER_NAME:$(id -gn "$USER_NAME")" "$WEB_LINK"; chmod 0755 "$SRC/ui"
 runuser -u "$USER_NAME" -- "$SRC/files/aria2c" --version >/dev/null || nas_fail "下载核心不能运行"
+# Exercise the exact check used at boot, before enabling the plugin.
+env PLUG_USER="$USER_NAME" PLUG_NAME=downloadcenter PLUG_SRC_DIR="$SRC" \
+    PLUG_HOME_DIR="$HOME_DIR" PLUG_TMP_DIR="$TMP" PLUG_STATUS=unverified \
+    /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败，未启动；请保留暂存目录用于排查。"
 CRON="/etc/cron.d/downloadcenter-$USER_NAME"
 cat > "$CRON" <<EOF
 SHELL=/bin/sh
@@ -528,6 +533,7 @@ if [ "$WAS_ENABLED" = true ]; then
     plugincenter -u "$USER_NAME" -p downloadcenter enable >/dev/null 2>&1 || true
 fi
 old="$SRC_PARENT/.downloadcenter.old.$$"; [ ! -d "$old" ] || rm -rf "$old"
+rm -f "$registry_backup"
 nas_log "下载中心 $PLUGIN_VERSION 已安装给 $USER_NAME；下载范围仅为该用户的 data 文件区。"
 nas_log "BT 入站端口 $(cat "$VAR/peer.port")（TCP/UDP）；RPC 仅监听本机，不要转发 RPC 端口。"
 NAS_INSTALL_SCRIPT

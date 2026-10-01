@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from urllib.request import build_opener, ProxyHandler, Request
 from urllib.error import HTTPError, URLError
-from download_lib import Manager, DownloadError, atomic_json, parse_tracker_subscription, tracker_cache, merged_trackers
+from download_lib import Manager, DownloadError, atomic_json, parse_tracker_subscription, tracker_cache, merged_trackers, core_path
 
 
 def manager(home):
@@ -154,7 +154,7 @@ def serve(m):
     os.chmod(path, 0o600)
     child = None
     try:
-        child = subprocess.Popen([str(m.home / "src/files/aria2c"), "--conf-path=" + str(path)], stdin=subprocess.DEVNULL,
+        child = subprocess.Popen([str(core_path(m)), "--conf-path=" + str(path)], stdin=subprocess.DEVNULL,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         for _ in range(20):
             if child.poll() is not None:

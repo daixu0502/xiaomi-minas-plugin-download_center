@@ -71,6 +71,8 @@ DOWNLOADCENTER_CORE_ARCHIVE=/你的路径/aria2-aarch64-linux-musl_static.zip ba
 
 ## 启动与端口
 
+- 安装和网页部署使用小米系统一致的完整目录 SHA-256 摘要；安装结束调用系统校验，避免重启时因摘要不一致被强制卸载。请勿直接修改已安装的 `src` 内容而不更新 `INFO.abstract`。
+- 内置 aria2 位于 `src/files/aria2c`；网页更新的核心位于 `var/core/aria2c`，优先使用并在重装时保留，不改动受校验的源码目录。
 - RPC 控制接口仅监听本机，端口从 `19300–19399` 分配，每用户独立密钥；不要将 RPC 映射到公网。
 - BT TCP/UDP 端口从 `19400–19499` 分配，具体值安装结束显示，也保存在 `var/peer.port`。需要更好的入站连通性时，可自行转发该用户 BT 端口，不是网页/RPC 端口。
 - 安装创建 `/etc/cron.d/downloadcenter-<用户>`，每分钟以普通用户检查下载服务。只在存储池已挂载且服务处于启用状态时启动。

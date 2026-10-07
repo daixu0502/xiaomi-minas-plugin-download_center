@@ -18,11 +18,14 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 
-VERSION = "1.0.8"
+VERSION = "1.1.1"
 MAX_TORRENT = 4 * 1024 * 1024
 DEFAULTS = {"directory": "", "concurrent": 3, "connections": 4, "downloadKiB": 0,
             "uploadKiB": 1024, "seedRatio": 1.0, "seedMinutes": 60,
             "trackers": [], "sources": [], "autoTrackers": False}
+BT_DEFAULTS = {"ipv6": True, "dht": True, "dht6": False, "pex": True, "lpd": True,
+               "maxPeers": 55, "peerSpeedKiB": 50}
+DEFAULTS.update(BT_DEFAULTS)
 LIVE = {"active", "waiting", "paused"}
 
 
@@ -378,6 +381,46 @@ class Manager:
                 "max-connection-per-server": str(s["connections"]), "seed-ratio": str(s["seedRatio"]),
                 "seed-time": str(s["seedMinutes"]), "bt-tracker": ",".join(s["trackers"])}
 
+    def bt_network_options(self, settings=None):
+        s = settings or self.settings()
+        boolean = lambda value: "true" if value else "false"
+        return {"disable-ipv6": boolean(not s["ipv6"]), "enable-dht": boolean(s["dht"]),
+                "enable-dht6": boolean(s["ipv6"] and s["dht6"]), "enable-peer-exchange": boolean(s["pex"]),
+                "bt-enable-lpd": boolean(s["lpd"]), "bt-max-peers": str(s["maxPeers"]),
+                "bt-request-peer-speed-limit": str(s["peerSpeedKiB"]) + "K"}
+
+    def bt_state(self):
+        # Read only our whitelisted startup options; never expose the RPC secret.
+        active = self.bt_network_options(dict(DEFAULTS))
+        try:
+            for line in (self.var / "aria2.conf").read_text().splitlines():
+                key, sep, value = line.partition("=")
+                if sep and key in active:
+                    active[key] = value
+        except OSError:
+            pass
+        try:
+            port = int((self.var / "peer.port").read_text())
+        except (OSError, ValueError):
+            port = None
+        return {"peerPort": port, "restartRequired": active != self.bt_network_options(),
+                "ipv6Detected": Path("/proc/net/if_inet6").exists()}
+
+    def save_bt_settings(self, data):
+        s = self.settings()
+        for key, default in BT_DEFAULTS.items():
+            value = data.get(key, s[key])
+            if isinstance(default, bool):
+                if type(value) is not bool:
+                    raise DownloadError("开关值无效：" + key)
+            elif type(value) is not int or not 1 <= value <= (500 if key == "maxPeers" else 10240):
+                raise DownloadError("BT 参数超出范围：" + key)
+            s[key] = value
+        if s["dht6"] and not s["ipv6"]:
+            raise DownloadError("IPv6 DHT 需要先启用 IPv6 连接")
+        atomic_json(self.settings_path, s)
+        return self.bt_state()
+
     def rows(self):
         with self.db() as db:
             return [dict(r) for r in db.execute("SELECT id,gid,created,snapshot FROM tasks ORDER BY created DESC")]
@@ -448,13 +491,23 @@ class Manager:
         self.rpc("addTorrent", source["torrent"], [], options)
         return self.rpc("tellStatus", options["gid"]), old
 
-    def sync(self):
-        active = self.rpc("tellActive")
-        waiting = self.rpc("tellWaiting", 0, 1000)
-        stopped = self.rpc("tellStopped", 0, 1000)
-        remote = {s["gid"]: s for s in active + waiting + stopped}
+    def sync(self, ident=None):
+        rows = [r for r in self.rows() if json.loads(r['snapshot']).get('engine') != 'qbittorrent'] if ident is None else [self.row(ident)]
+        if ident is None:
+            active = self.rpc("tellActive")
+            waiting = self.rpc("tellWaiting", 0, 1000)
+            stopped = self.rpc("tellStopped", 0, 1000)
+            remote = {s["gid"]: s for s in active + waiting + stopped}
+        else:
+            try:
+                item = self.rpc("tellStatus", rows[0]["gid"])
+                remote = {item["gid"]: item}
+            except DownloadError:
+                self.rpc("getVersion")  # Do not mark tasks missing on a dead core.
+                remote = {}
+        root = self.root.resolve()
         with self.db() as db:
-            for row in self.rows():
+            for row in rows:
                 gid = row["gid"]
                 item = remote.get(gid)
                 old = json.loads(row["snapshot"])
@@ -481,10 +534,13 @@ class Manager:
                     bt_name = item.get("bittorrent", {}).get("info", {}).get("name", "")
                     if bt_name and Path(bt_name).name == bt_name and not old.get("metadataPending"):
                         candidates.add(str(self.root / old["directory"] / (bt_name + ".aria2")))
+                    registered = {r[0] for r in db.execute("SELECT path FROM task_files WHERE task=?", (row["id"],))}
                     for filename in candidates:
                         try:
                             target = Path(filename)
-                            rel = target.relative_to(self.root.resolve()).as_posix()
+                            rel = target.relative_to(root).as_posix()
+                            if rel in registered:
+                                continue  # Ownership by recorded path; no repeated HDD stat.
                             stat = target.lstat()
                             import stat as statmod
                             if statmod.S_ISREG(stat.st_mode):
@@ -496,7 +552,8 @@ class Manager:
                     snap.update({k: item.get(k, "0") for k in ("status", "totalLength", "completedLength", "downloadSpeed", "uploadSpeed", "uploadLength", "connections", "numSeeders", "errorCode")})
                     snap.update({"name": name, "errorMessage": item.get("errorMessage", ""), "directory": old["directory"],
                                  "isBT": bool(item.get("bittorrent") or old.get("isBT")), "fileCount": len(files)})
-                    db.execute("UPDATE tasks SET gid=?,snapshot=? WHERE id=?", (gid, json.dumps(snap), row["id"]))
+                    if snap != old or gid != row["gid"]:
+                        db.execute("UPDATE tasks SET gid=?,snapshot=? WHERE id=?", (gid, json.dumps(snap), row["id"]))
                 elif json.loads(row["snapshot"]).get("status") in LIVE:
                     snap = json.loads(row["snapshot"])
                     snap.update(status="error", errorMessage="核心中未找到任务，可能上次异常断电；可重试恢复", downloadSpeed="0", uploadSpeed="0")
@@ -505,7 +562,8 @@ class Manager:
     def snapshot(self):
         running, error, stats, version = False, "", {}, ""
         try:
-            self.sync()
+            # Supervisor owns full synchronization. UI reads must not rescan
+            # every torrent/file while holding the same lock as task actions.
             stats = self.rpc("getGlobalStat")
             version = self.rpc("getVersion")["version"]
             running = True
@@ -526,7 +584,7 @@ class Manager:
         except (OSError, ValueError):
             job = {}
         return {"running": running, "error": error, "stats": stats, "tasks": tasks, "version": VERSION,
-                "engineVersion": version, "settings": self.settings(), "trackerStatus": tracker_status,
+                "engineVersion": version, "settings": self.settings(), "bt": self.bt_state(), "trackerStatus": tracker_status,
                 "coreUpdate": self.core_state(),
                 "free": shutil.disk_usage(self.root).free, "enabled": (self.var / "enabled").exists(),
                 "job": {k: job.get(k) for k in ("state", "count", "failed", "total", "id", "command")}}
@@ -684,7 +742,7 @@ class Manager:
                     time.sleep(.15)
                 else:
                     raise DownloadError("任务仍在停止，请稍后重试删除")
-                self.sync()
+                self.sync(ident)
             else:
                 try:
                     self.rpc("removeDownloadResult", gid)
@@ -978,7 +1036,7 @@ class Manager:
             return {"applied": 0, "deferred": True, "failed": []}
         for row in self.rows():
             s = json.loads(row["snapshot"])
-            if s.get("isBT") and s.get("status") in LIVE:
+            if s.get("isBT") and s.get("status") in LIVE and s.get('engine') != 'qbittorrent':
                 try:
                     self.rpc("changeOption", row["gid"], {"bt-tracker": trackers})
                     applied += 1
@@ -1029,7 +1087,7 @@ class Manager:
 
     def dispatch(self, action, data):
         with self.locked():
-            if self.core_state().get('state') == 'installing' and action not in ('status', 'browse', 'torrent_browse', 'torrent_preview', 'torrent_nas_preview', 'detail'):
+            if (self.core_state().get('state') == 'installing' or getattr(self, 'qb_update_state', lambda: {})().get('state') == 'installing') and action not in ('status', 'browse', 'torrent_browse', 'torrent_preview', 'torrent_nas_preview', 'detail'):
                 raise DownloadError('正在切换下载核心，请稍后再操作')
             if action in ('core_check', 'core_apply'):
                 from core_update import queue
@@ -1062,8 +1120,15 @@ class Manager:
             if action == "add":
                 return self.add(data)
             if action == "task":
-                self.sync()
-                return self.operate(data.get("id"), data.get("command"), data.get("deleteFiles") is True)
+                ident = data.get("id")
+                self.row(ident)  # Validate before choosing the targeted sync path.
+                if data.get("command") not in ("pause", "resume", "top", "retry", "remove"):
+                    raise DownloadError("不支持的任务操作")
+                self.sync(ident)
+                result = self.operate(ident, data.get("command"), data.get("deleteFiles") is True)
+                if data.get("command") != "remove":
+                    self.sync(ident)
+                return result
             if action == "batch":
                 if data.get("command") not in ("pause", "resume"):
                     raise DownloadError("无效批量操作")
@@ -1078,6 +1143,8 @@ class Manager:
                 return self.clean_cache()
             if action == "settings":
                 return self.save_settings(data)
+            if action == "bt_settings":
+                return self.save_bt_settings(data)
             if action == "trackers":
                 return self.save_trackers(data)
             if action == "tracker_update":

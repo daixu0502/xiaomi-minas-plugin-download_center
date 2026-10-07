@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='downloadcenter'
 PLUGIN_LABEL='下载中心'
-PLUGIN_VERSION='1.0.8'
+PLUGIN_VERSION='1.1.1'
 UNINSTALL_NOTE='停止所选用户下载服务；配置、种子和任务记录先备份。已下载及未完成文件均保留，不影响其他用户。'
 
 # Common installation flow adapted from the existing standalone plugins.
@@ -428,6 +428,9 @@ installer_prepare_payload() {
     local -a args=("$1/payload/files/aria2c" aarch64)
     [[ -z $archive ]] || args+=("$archive")
     python3 "$1/payload/files/fetch_core.py" "${args[@]}"
+    local -a qb_args=("$1/payload/files/qbittorrent-nox" aarch64)
+    [[ -z ${DOWNLOADCENTER_QB_BINARY:-} ]] || qb_args+=("$DOWNLOADCENTER_QB_BINARY")
+    python3 "$1/payload/files/fetch_qb.py" "${qb_args[@]}"
 }
 installer_emit_install() {
     installer_emit_probe
@@ -442,6 +445,7 @@ PAYLOAD="$INSTALLER_DIR/payload"; VAR="$HOME_DIR/var"
 SRC_PARENT="${SRC%/*}"; WEB_LINK="$NAS_WEB_ROOT/$USER_NAME/downloadcenter"
 ICON=/data/plugin/www/icon/downloadcenter.icon
 [ -s "$PAYLOAD/files/aria2c" ] || nas_fail "缺少经过校验的 aria2 核心。"
+[ -s "$PAYLOAD/files/qbittorrent-nox" ] || nas_fail "缺少经过校验的 qBittorrent 核心。"
 mkdir -p "$HOME_DIR/scripts" "$VAR" "$SRC_PARENT" "$TMP" "$NAS_WEB_ROOT/$USER_NAME" /data/plugin/www/icon
 WAS_ENABLED=true
 if [ -x "$HOME_DIR/scripts/control" ]; then
@@ -474,6 +478,9 @@ allocate() {
 }
 allocate "$VAR/rpc.port" 19300 19399
 allocate "$VAR/peer.port" 19400 19499
+allocate "$VAR/qb.port" 19500 19599
+allocate "$VAR/aria-peer.port" 19600 19699
+allocate "$VAR/openlist.port" 19700 19799
 stage="$SRC_PARENT/.downloadcenter.new.$$"
 [ ! -e "$stage" ] || nas_fail "安装暂存路径已存在。"
 mkdir "$stage"
@@ -488,7 +495,7 @@ if [ -x "$SRC/files/aria2c" ]; then
     fi
 fi
 find "$stage" -type d -name __pycache__ -prune -exec rm -rf {} \;
-chmod 0755 "$stage/files/aria2c" "$stage/ui/downloadcenter.cgi"
+chmod 0755 "$stage/files/aria2c" "$stage/files/qbittorrent-nox" "$stage/ui/downloadcenter.cgi"
 [ ! -d "$SRC" ] || mv "$SRC" "$SRC_PARENT/.downloadcenter.old.$$"
 mv "$stage" "$SRC"
 cp "$PAYLOAD/scripts/control" "$HOME_DIR/scripts/control"; chmod 0755 "$HOME_DIR/scripts/control"
@@ -499,7 +506,7 @@ chmod 0700 "$HOME_DIR" "$VAR"; chmod 0600 "$VAR/"*.port "$VAR/rpc.secret"
 now=$(date +%s); size=$(du -sk "$SRC" | awk '{print $1*1024}')
 abstract=$(python3 -B "$SRC/files/integrity.py" "$SRC")
 jq -n --arg v "$PLUGIN_VERSION" --arg a "$abstract" --argjson t "$now" --argjson s "$size" \
-'{plugin:"downloadcenter",name:"下载中心",id:19096,version:$v,tags:["tool"],timestamp:$t,desc:"直链、磁链、BT 与 Tracker 管理",developer:"Local",publisher:"Local",changelog:"统一六插件视觉规范、全宽桌面布局、手机深色主题与样式隔离",system:false,size:$s,type:"standard",forceupgrade:false,ext:{admin:true},hotplug:["net"],abstract:$a}' > "$HOME_DIR/INFO"
+'{plugin:"downloadcenter",name:"下载中心",id:19096,version:$v,tags:["tool"],timestamp:$t,desc:"直链、磁链、BT 与 Tracker 管理",developer:"Local",publisher:"Local",changelog:"qBittorrent 在线核心更新、Tracker 生效核对与 Openlist 界面优化",system:false,size:$s,type:"standard",forceupgrade:false,ext:{admin:true},hotplug:["net"],abstract:$a}' > "$HOME_DIR/INFO"
 rm -f "$WEB_LINK"; ln -s "$SRC/ui" "$WEB_LINK"
 python3 "$PAYLOAD/make_icon.py" "$ICON"; chmod 0644 "$ICON"
 entry="$TMP/entry.$$"
@@ -515,6 +522,7 @@ flock -u 9; rm -f "$entry"
 chown -R "$USER_NAME:$(id -gn "$USER_NAME")" "$HOME_DIR" "$SRC" "$TMP"
 chown -h "$USER_NAME:$(id -gn "$USER_NAME")" "$WEB_LINK"; chmod 0755 "$SRC/ui"
 runuser -u "$USER_NAME" -- "$SRC/files/aria2c" --version >/dev/null || nas_fail "下载核心不能运行"
+runuser -u "$USER_NAME" -- "$SRC/files/qbittorrent-nox" --version >/dev/null || nas_fail "qBittorrent 不能运行"
 # Exercise the exact check used at boot, before enabling the plugin.
 env PLUG_USER="$USER_NAME" PLUG_NAME=downloadcenter PLUG_SRC_DIR="$SRC" \
     PLUG_HOME_DIR="$HOME_DIR" PLUG_TMP_DIR="$TMP" PLUG_STATUS=unverified \

@@ -50,10 +50,10 @@ try:
         home = Path("/home") / user / "plugin/downloadcenter"
         m = manager(home)
         if action == "service":
-            if m.core_state().get('state') == 'installing':
+            if m.core_state().get('state') == 'installing' or m.qb_update_state().get('state') == 'installing':
                 raise DownloadError('正在切换下载核心，请稍后再操作服务')
             command = data.get("command")
-            if command not in ("start", "stop"):
+            if command not in ("start", "stop", "restart"):
                 raise DownloadError("无效服务操作")
             # Fire-and-poll: never hold a CGI request open while stopping the engine.
             m.ready()

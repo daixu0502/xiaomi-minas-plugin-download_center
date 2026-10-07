@@ -158,6 +158,9 @@ def install_candidate(m, candidate, version):
 
 
 def queue(m, command, proxy=False):
+    from qb_update import state as qb_state
+    if qb_state(m).get('state') in BUSY:
+        raise DownloadError('qBittorrent 正在检查或升级，请稍后再操作 aria2')
     previous = state(m)
     if previous.get('state') in BUSY and time.time() - previous.get('time', 0) < 900:
         raise DownloadError('已有核心检查或更新正在执行，请稍后查看结果')

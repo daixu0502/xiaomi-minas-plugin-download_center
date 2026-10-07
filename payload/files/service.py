@@ -9,17 +9,19 @@ import ssl
 import subprocess
 import sys
 import time
+import threading
 from pathlib import Path
 from urllib.request import build_opener, ProxyHandler, Request
 from urllib.error import HTTPError, URLError
 from download_lib import Manager, DownloadError, atomic_json, parse_tracker_subscription, tracker_cache, merged_trackers, core_path
+from dual_engine import DualManager
 
 
 def manager(home):
     home = Path(home)
     # Derive data root from installer-validated src; never from a web request.
     src = (home / "src").resolve(strict=True)
-    return Manager(home, src.parent.parent.parent / "data")
+    return DualManager(home, src.parent.parent.parent / "data")
 
 
 def live(m):
@@ -141,30 +143,44 @@ def serve(m):
     directory = m.directory(settings["directory"])
     conf = {"enable-rpc": "true", "rpc-listen-all": "false", "rpc-allow-origin-all": "false",
             "rpc-listen-port": (m.var / "rpc.port").read_text().strip(), "rpc-secret": (m.var / "rpc.secret").read_text().strip(),
-            "listen-port": (m.var / "peer.port").read_text().strip(), "dht-listen-port": (m.var / "peer.port").read_text().strip(),
+            "listen-port": (m.var / "aria-peer.port").read_text().strip(), "dht-listen-port": (m.var / "aria-peer.port").read_text().strip(),
             "dir": str(directory), "input-file": str(session), "save-session": str(session), "save-session-interval": "15",
             "save-not-found": "true", "force-save": "true", "continue": "true", "auto-file-renaming": "true",
             "allow-overwrite": "false", "file-allocation": "none", "check-certificate": "true", "max-tries": "5", "retry-wait": "5",
             "connect-timeout": "15", "timeout": "60", "max-download-result": "1000", "follow-torrent": "false", "follow-metalink": "false",
-            "bt-save-metadata": "false", "bt-enable-lpd": "true", "enable-dht": "true", "enable-dht6": "false",
+            "bt-save-metadata": "false", "dht-file-path6": str(m.var / "dht6.dat"),
             "dht-file-path": str(m.var / "dht.dat"), "disk-cache": "16M", "console-log-level": "warn", "summary-interval": "0",
-            "log-level": "warn", "log": str(m.var / "aria2.log"), **m.options(settings)}
+            "log-level": "warn", "log": str(m.var / "aria2.log"), **m.options(settings), **m.bt_network_options(settings)}
     path = m.var / "aria2.conf"
     path.write_text("\n".join(k + "=" + v for k, v in conf.items()) + "\n")
     os.chmod(path, 0o600)
-    child = None
+    child, qb_child, gateway = None, None, None
     try:
         child = subprocess.Popen([str(core_path(m)), "--conf-path=" + str(path)], stdin=subprocess.DEVNULL,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        profile = m.qb.prepare()
+        qb_log = m.var / 'qbittorrent.log'
+        if qb_log.exists() and qb_log.stat().st_size > 2 * 1024 * 1024:
+            os.replace(qb_log, m.var / 'qbittorrent.log.1')
+        with qb_log.open('a') as output:
+            from qb_update import core_path as qb_core_path
+            qb_child = subprocess.Popen([str(qb_core_path(m)), '--profile=' + str(profile),
+                                         '--confirm-legal-notice'], stdin=subprocess.DEVNULL, stdout=output, stderr=output)
         for _ in range(20):
-            if child.poll() is not None:
-                raise DownloadError("aria2 启动失败，请查看 var/aria2.log")
+            if child.poll() is not None or qb_child.poll() is not None:
+                raise DownloadError("下载核心启动失败，请查看 aria2.log / qbittorrent.log")
             try:
-                m.rpc("getVersion"); break
+                m.rpc("getVersion"); m.qb.request('app/version'); break
             except DownloadError:
                 time.sleep(.3)
-        last_save, last_auto = 0, time.time()
-        while not stopping[0] and child.poll() is None:
+        else:
+            raise DownloadError('下载核心启动超时')
+        m.qb.apply_preferences()
+        m.qb.mark_applied()
+        from openlist_gateway import start_gateway
+        gateway = start_gateway(m)
+        last_save, last_auto, tracker_worker = 0, time.time(), None
+        while not stopping[0] and child.poll() is None and qb_child.poll() is None:
             m.ready()  # Pool lost: stop instead of writing into an empty mountpoint.
             with m.locked():
                 m.sync()
@@ -176,8 +192,9 @@ def serve(m):
                     status = {}
                 s = m.settings()
                 update = status.get("state") == "pending" or (s["autoTrackers"] and s["sources"] and time.time() - max(status.get("time", 0), last_auto) > 86400)
-            if update:
-                update_trackers(m); last_auto = time.time()
+            if update and not (tracker_worker and tracker_worker.is_alive()):
+                tracker_worker = threading.Thread(target=update_trackers, args=(manager(m.home),), daemon=True)
+                tracker_worker.start(); last_auto = time.time()
             if not stopping[0]:
                 m.process_job()
             for _ in range(10):
@@ -185,6 +202,14 @@ def serve(m):
                     break
                 time.sleep(.3)
     finally:
+        if gateway:
+            gateway.shutdown(); gateway.server_close()
+        if qb_child and qb_child.poll() is None:
+            qb_child.terminate()
+            try:
+                qb_child.wait(timeout=25)
+            except subprocess.TimeoutExpired:
+                qb_child.kill(); qb_child.wait()
         if child and child.poll() is None:
             try:
                 m.save_session()
@@ -207,12 +232,22 @@ def control(m, command):
 
 def control_locked(m, command):
     # Caller owns lifecycle.lock (also used by the core updater).
+    if command == "restart":
+        enabled = (m.var / "enabled").exists()
+        try:
+            control_locked(m, "stop")
+            control_locked(m, "start")
+        except Exception:
+            if enabled:
+                (m.var / "enabled").touch(mode=0o600)
+            raise
+        return
     if command in ("stop", "disable", "preuninstall", "preupgrade"):
         (m.var / "enabled").unlink(missing_ok=True)
         pid = live(m)
         if pid:
             os.kill(pid, signal.SIGTERM)
-            for _ in range(120):
+            for _ in range(240):
                 if not live(m):
                     break
                 time.sleep(.25)

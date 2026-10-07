@@ -1,12 +1,37 @@
 # 小米智能存储下载中心
 
-插件版本 **1.0.8**。使用独立 aria2 核心，提供直链、磁链和 BT 下载；不是迅雷官方客户端，不提供会员、离线加速或资源解析。
+插件版本 **1.1.1**。内置 **qBittorrent 5.2.4（libtorrent 2.0.15）**，HTTP／HTTPS／FTP／SFTP 直链保留 aria2。两个核心以所属普通用户独立运行，不依赖 Docker；现有插件界面、目录树、文件选择、Tracker 订阅与安全删除逻辑保留。
 
-## 本版界面更新
+## 1.1.1 更新
 
-统计信息使用共用背景与细分隔线，不再使用独立大卡片；手机按内容显示紧凑单行或两行，电脑优先单行。Docker 统计保留点击跳转，定时任务仅在失败数非零时强调，文件快传在记录页标题旁显示计数。
+- 设置页新增 qBittorrent 内核检查与更新，可选通过本机 Mihomo 下载。限定稳定 qBittorrent 5 / libtorrent 2 兼容渠道，支持同 qB 版本下的 libtorrent 构建更新，不自动跨大版本。
+- 校验 SHA-256、大小、设备架构和版本；切换前保留任务及配置，新核心启动失败尝试回退原核心与 qB profile。与 aria2 更新互斥，确认更新后会短暂重启当前用户双核心，Openlist 共用下载也会短暂中断。
+- 更新核心位于 `var/core/qbittorrent-nox`，不改受系统校验的 `src`；重装保留，卸载随 var 备份。更新成功清理临时文件；回退不完整则保留 recovery 文件并提示。
+- Tracker 页新增“核对 qB 生效情况”：区分列表已保存、任务已包含与实际连接状态。仅向下载中心管理的非私有 BT 任务追加，等待磁链元数据后追加；Openlist 外部任务不自动追加。没有任务不视为已验证连通；每次最多核对 20 个任务，超出提示部分结果。
+- 设置页顺序：下载服务、下载偏好、BT 网络、Openlist 接入、两个核心更新、缓存清理、说明。核心更新电脑宽屏并排、手机单列；连接地址整行并支持复制，长说明可折叠。
+- 保留现有 Openlist Download 映射，不增加目录选择或权限助手，不修改 Openlist 配置。
 
-统一六插件的页头位置、状态卡片、统计信息顺序、圆角、间距和刷新按钮。电脑客户端随窗口使用全部可用宽度，手机页头显示当前插件名称，浅色使用雾灰背景，手机深色使用中性炭灰。样式限定在插件内部，不修改客户端全局字体；保留原有配置和功能。
+## 1.1.0 双核心更新
+
+- 新 BT／磁链交给 qBittorrent；原 aria2 BT 任务保留原核心直至处理完毕，不冒险自动迁移未完成文件。任务列表、批量按钮和历史记录同时管理两类任务。
+- 新增 IPv6、DHT、PEX、本地节点发现、UPnP／NAT-PMP、每任务及全局连接上限。qBittorrent 的 DHT 开关同时作用于已启用的 IPv4／IPv6，没有独立 IPv6 DHT 开关。首次切换 IPv6 与 UPnP 默认关闭；DHT、PEX、本地发现默认开启。
+- BT 设置先保存，确认重启当前用户下载核心后生效；不重启 NAS。使用同一核心的 Openlist 下载也会短暂中断。服务停用后开机不会自动拉起。
+- 修复任务按钮操作后等待下一轮刷新才更新的问题；普通状态查询不再重复全量扫描所有任务文件，单任务操作仅同步该任务。Tracker 订阅下载不再阻塞后台队列同步。
+- 私有种子不追加用户配置的公共 Tracker。DHT／PEX 等私有种子限制由核心遵守。
+- HTTP／BT 的并发及限速按每个核心分别生效，两个核心同时工作时合计可能达到两倍设置；Openlist 共用 qBittorrent 的限速和连接上限。
+- 两个核心各有独立网页更新按钮，不能把 aria2 更新按钮当作 qBittorrent 更新按钮。
+
+### Openlist 接入
+
+设置页点击“显示 Openlist 连接信息”，复制专属 URL 到 Openlist 后台的离线下载 → qBittorrent URL。URL 内含密码，切勿公开。插件普通状态接口不会返回密码，隐藏连接信息时会清除页面输入框。
+
+- Openlist 必须采用 **host 网络**，通过本机兼容端口连接（安装器从 19700–19799 分配）。不需要向局域网或公网开放管理接口。bridge 网络不能用容器内的 127.0.0.1 直接连接本插件。
+- 兼容层转换新版 qBittorrent 登录／创建任务响应和停止状态，仅开放 Openlist 所需接口；不提供核心设置修改和文件删除接口。
+- 仅可查询、移除带 Openlist 标签且保存于当前用户空间的任务；插件自身记录和 Openlist 任务分开，不在下载中心列表混合显示或批量删除。
+- 容器的 `/opt/openlist/data/temp/<任务目录>` 会转换为当前 NAS 用户的 `data/Download/<任务目录>`。Openlist 必须将这两个路径映射到同一实际目录。当前用户空间的同名绝对路径也可以直接使用；其他路径被拒绝。
+- 若 Openlist 的临时目录映射不是上述约定，先调整映射，或将运行配置 `var/settings.json` 的 `openlistDirectory` 设置为对应的用户空间相对路径，再重启下载服务。不能填写其他用户路径。
+- 不自动改变 Openlist 的现有 aria2 配置或将所有离线下载默认切换为 qBittorrent。新建离线任务时选择 qBittorrent。
+- 共用核心意味着启动／停止服务与全局 BT 设置也影响 Openlist 任务；卸载插件后，该连接不再可用。
 
 ## 功能
 
@@ -18,7 +43,7 @@
 - 删除单个任务时可勾选“同时删除已下载和未完成文件”，默认不勾选。清空历史仅移除记录。
 - 并发数、连接数、上传/下载总限速、做种时间和分享率设置。
 - Tracker 手动列表、最多 3 个 HTTP/HTTPS 订阅、一键更新、去重、每天自动更新（默认关闭）、应用到进行中的 BT 任务。
-- 每用户独立进程、端口、密钥、配置和记录，不依赖 Docker、不复用 Openlist 服务、不需要额外 root 权限助手。
+- 每用户独立进程、端口、密钥、配置和记录，不依赖 Docker、不复用 Openlist 自带核心、不需要额外 root 权限助手。
 
 ## 下载目录
 
@@ -53,13 +78,15 @@ bash manage.sh uninstall --users u123456789 --yes
 
 本机执行时省略 `--ip`；远程非交互执行需要 SSH 密钥。安装前必须已初始化用户并正常挂载存储池。安装器要求 ARM64、Python 3.8+（含 sqlite3）、jq、runuser、flock、ss 和设备原有 plugincenter。
 
-首次安装自动下载固定版本 **aria2 1.37.0 ARM64 静态构建**，核对固定 SHA-256 后提取核心。第三方构建来源见许可说明，校验失败不会安装。GitHub 网络受限时可预先下载指定 ZIP，再离线安装：
+首次安装自动下载固定版本 **qBittorrent 5.2.4 / libtorrent 2.0.15** 与 **aria2 1.37.0 ARM64 静态构建**，核对固定 SHA-256 后提取核心。第三方构建来源见许可说明，校验失败不会安装。GitHub 网络受限时可预先下载指定 ZIP，再离线安装：
 
 ```bash
-DOWNLOADCENTER_CORE_ARCHIVE=/你的路径/aria2-aarch64-linux-musl_static.zip bash manage.sh install
+DOWNLOADCENTER_CORE_ARCHIVE=/你的路径/aria2-aarch64-linux-musl_static.zip \
+DOWNLOADCENTER_QB_BINARY=/你的路径/aarch64-qbittorrent-nox \
+bash manage.sh install
 ```
 
-指定的离线 ZIP 同样必须通过固定哈希校验，不接受随意替换的可执行文件。文件下载在执行安装的电脑/WSL或 NAS 本机进行，可按环境设置 `https_proxy`。
+指定的 aria2 离线 ZIP 与 qBittorrent 离线可执行文件同样必须通过固定哈希校验，不接受随意替换的可执行文件。文件下载在执行安装的电脑/WSL或 NAS 本机进行，可按环境设置 `https_proxy`。
 
 更新保留配置、队列和记录；原来停用的服务保持停用。卸载会停止所选用户服务，移除网页注册、用户专属定时项及程序，但不删除任何下载文件。配置和记录先备份到：
 
@@ -72,9 +99,10 @@ DOWNLOADCENTER_CORE_ARCHIVE=/你的路径/aria2-aarch64-linux-musl_static.zip ba
 ## 启动与端口
 
 - 安装和网页部署使用小米系统一致的完整目录 SHA-256 摘要；安装结束调用系统校验，避免重启时因摘要不一致被强制卸载。请勿直接修改已安装的 `src` 内容而不更新 `INFO.abstract`。
-- 内置 aria2 位于 `src/files/aria2c`；网页更新的核心位于 `var/core/aria2c`，优先使用并在重装时保留，不改动受校验的源码目录。
+- 内置核心位于 `src/files/aria2c` 和 `src/files/qbittorrent-nox`；网页更新核心位于 `var/core/` 同名文件，优先使用并在重装时保留，不改动受校验的源码目录。
 - RPC 控制接口仅监听本机，端口从 `19300–19399` 分配，每用户独立密钥；不要将 RPC 映射到公网。
-- BT TCP/UDP 端口从 `19400–19499` 分配，具体值安装结束显示，也保存在 `var/peer.port`。需要更好的入站连通性时，可自行转发该用户 BT 端口，不是网页/RPC 端口。
+- qBittorrent API 从 `19500–19599` 分配，Openlist 兼容接口从 `19700–19799` 分配，两者只监听 127.0.0.1，均需要认证；不要向公网转发。原 aria2 BT 任务使用独立 `19600–19699` 端口，避免双核心冲突。
+- qBittorrent BT TCP/UDP 端口从 `19400–19499` 分配，具体值安装结束显示，也保存在 `var/peer.port`。需要更好的入站连通性时，可自行转发该用户 BT 端口，不是网页/RPC 端口。
 - 安装创建 `/etc/cron.d/downloadcenter-<用户>`，每分钟以普通用户检查下载服务。只在存储池已挂载且服务处于启用状态时启动。
 - 手动停止服务后保持停止；重启后最多等待约一分钟恢复。运行中检测到存储池未挂载会停止核心。正常停机会保存队列；异常断电仍可能丢失最近约 15 秒的核心会话变化。
 - 暂停任务在重启后保持暂停。已完成/失败记录独立保存在 SQLite，不依赖核心内存历史。
@@ -95,11 +123,20 @@ DOWNLOADCENTER_CORE_ARCHIVE=/你的路径/aria2-aarch64-linux-musl_static.zip ba
 - 最多保留 1000 条任务，种子及链接元数据合计不超过 64 MiB。
 - 所有网页操作仍依赖小米客户端的用户认证；本插件不提供独立公网管理页面。
 
+## 测试范围与限制
+
+已提供 Python 单元测试、可选真实 qBittorrent 本地传输测试，以及电脑／手机深浅色界面模拟测试。真实核心测试只在临时目录使用自建本地种子，不下载公网资源。模拟手机尺寸不等于 Android／iOS 客户端实机验证；公网 BT 速度仍取决于资源热度、连通性和磁盘负载，更换核心不保证每个资源提速。
+
+```bash
+python3 -B -m unittest discover -s tests -p 'test_*.py' -v
+QB_TEST_BINARY=/path/to/qbittorrent-nox python3 -B -m unittest discover -s tests -p 'test_qb_engine.py' -v
+```
+
 ## 日志与本地验证
 
-日志在 `/home/<用户>/plugin/downloadcenter/var/`：`service.log`、`aria2.log`、`control.log`。其中链接或文件名可能含隐私，请脱敏后分享。
+日志在 `/home/<用户>/plugin/downloadcenter/var/`：`service.log`、`aria2.log`、`qbittorrent.log`、`control.log`。其中链接或文件名可能含隐私，请脱敏后分享。
 
-源码仓库的 `tests/test_download_center.py` 覆盖路径越界、符号链接、删除保护、种子解析，并可通过 `--engine /path/to/aria2c` 运行真实核心的本地 HTTP 下载和队列测试。`tests/download-preview.cjs` 使用模拟 API 检查页面布局与交互，不代表真实手机 APP 已实机验证。
+`tests/test_qb_engine.py` 覆盖路径越界、符号链接、文件删除保护、任务分流、私有种子 Tracker 与 Openlist 适配；设置 `QB_TEST_BINARY` 后运行真实核心的本地磁链传输测试。`tests/test_bt_settings.py` 检查原有 aria2 路径及响应优化，`tests/test_integrity.py` 检查系统校验与核心更新回退。`tests/ui_dual_engine.cjs` 使用模拟 API 检查电脑／手机布局和按钮交互，不代表手机 APP 已实机验证。
 
 请仅下载有权获取和分享的内容。
 

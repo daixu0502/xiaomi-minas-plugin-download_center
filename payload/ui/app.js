@@ -3,7 +3,7 @@
 var document = window.XiaomiPluginClient.document;
   const $ = id => document.getElementById(id), live = ['active', 'waiting', 'paused'];
   const labels = { active: '下载中', waiting: '排队中', paused: '已暂停', complete: '已完成', error: '失败', removed: '已取消' };
-  let snapshot = null, page = 'tasks', filter = 'all', settingsLoaded = false, trackersLoaded = false;
+  let snapshot = null, page = 'tasks', filter = 'all', settingsLoaded = false, trackersLoaded = false, btLoaded = false;
   let kind = 'url', torrent = '', folderFor = '', folderPath = '', newDirectory = '', defaultDirectory = '';
   let folderNodes = new Map(), folderDraft = null, folderEpoch = 0, folderReady = false;
   let nasTorrentPath = '', nasTorrentEpoch = 0;
@@ -27,8 +27,11 @@ var document = window.XiaomiPluginClient.document;
   }
   async function busy(button, fn) { if (button.disabled) return; button.disabled = true; button.setAttribute('aria-busy', 'true'); try { await fn(); } catch (e) { toast(e.name === 'AbortError' ? '请求超时，请刷新确认结果后再操作' : e.message, true); } finally {
     const jobButtons = { pauseAll: 'pause', resumeAll: 'resume', clearHistory: 'clear' };
-    const pending = (servicePending && button.id === (servicePending.command === 'start' ? 'serviceStart' : 'serviceStop')) || (snapshot?.job?.state === 'pending' && jobButtons[button.id] === snapshot.job.command) || (['coreCheck', 'coreApply'].includes(button.id) && ['pending', 'checking', 'downloading', 'installing'].includes(snapshot?.coreUpdate?.state));
+    const pending = (servicePending && button.id === (servicePending.command === 'restart' ? 'btRestart' : servicePending.command === 'start' ? 'serviceStart' : 'serviceStop')) || (snapshot?.job?.state === 'pending' && jobButtons[button.id] === snapshot.job.command) || (['coreCheck', 'coreApply', 'qbCheck', 'qbApply'].includes(button.id) && [snapshot?.coreUpdate?.state, snapshot?.qbUpdate?.state].some(s => ['pending', 'checking', 'downloading', 'installing'].includes(s)));
     button.disabled = Boolean(pending); if (!pending) button.removeAttribute('aria-busy');
+    if (button.id === 'qbApply' && !snapshot?.qbUpdate?.updateAvailable) button.disabled = true;
+    if (button.id === 'coreApply' && !snapshot?.coreUpdate?.updateAvailable) button.disabled = true;
+    if (button.closest('.task-card') && snapshot && !dialogs().length && !document.querySelector('.task-card [aria-busy=true]')) renderTasks();
   } }
   function lock() {
     const open = dialogs().length > 0, root = document.documentElement, was = root.classList.contains('dialog-scroll-locked');
@@ -65,7 +68,7 @@ var document = window.XiaomiPluginClient.document;
   document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { filter = b.dataset.filter; document.querySelectorAll('[data-filter]').forEach(x => x.classList.toggle('active', x === b)); renderTasks(); });
   $('search').oninput = renderTasks;
   function taskButton(label, fn, cls = '') { const b = text('button', label, cls); b.onclick = () => busy(b, fn); return b; }
-  async function operation(t, command) { let deleteFiles = false; if (command === 'remove') { const result = await confirm('删除任务？', '默认保留下载文件。任务自动生成的种子缓存会一并清理，手动导入的原种子不受影响。勾选后删除该任务登记的下载和续传文件；任务创建的文件夹为空则删除，非空则保留。文件删除失败也移除记录并提示残留。', true); if (!result.ok) return; deleteFiles = result.deleteFiles; } const response = await api('task', { id: t.id, command, deleteFiles }); toast(response.warning || (command === 'remove' ? '任务记录已删除' : '操作已提交'), Boolean(response.warning)); await refresh(); }
+  async function operation(t, command) { let deleteFiles = false; if (command === 'remove') { const result = await confirm('删除任务？', '默认保留下载文件。任务自动生成的种子缓存会一并清理，手动导入的原种子不受影响。勾选后删除该任务登记的下载和续传文件；任务创建的文件夹为空则删除，非空则保留。文件删除失败也移除记录并提示残留。', true); if (!result.ok) return; deleteFiles = result.deleteFiles; } const response = await api('task', { id: t.id, command, deleteFiles }); toast(response.warning || (command === 'remove' ? '任务记录已删除' : '操作已提交'), Boolean(response.warning)); await refresh(true); }
   function renderTasks() {
     if (!snapshot) return;
     const query = $('search').value.trim().toLowerCase();
@@ -92,12 +95,16 @@ var document = window.XiaomiPluginClient.document;
       if (!list.children.length) list.append(text('div', history ? '暂无历史记录' : '暂无下载任务，点击“新建下载”开始', 'empty'));
     }
   }
-  async function refresh() {
-    if (refreshing) return; refreshing = true;
+  async function refresh(fresh = false) {
+    if (fresh && refreshing) await refreshing;
+    if (!refreshing) refreshing = loadSnapshot().finally(() => { refreshing = null; });
+    return refreshing;
+  }
+  async function loadSnapshot() {
     try {
       snapshot = await api('status'); const s = snapshot;
       $('health').textContent = s.running ? '服务运行中' : '服务未运行'; $('health').className = 'badge ' + (s.running ? 'enabled' : 'failed');
-      $('engine').textContent = s.engineVersion ? 'aria2 ' + s.engineVersion : '独立用户下载引擎';
+      $('engine').textContent = 'BT：qBittorrent ' + (s.engines?.qbittorrent?.version || '未连接') + ' · 直链：aria2 ' + (s.engineVersion || '未连接');
       $('version').textContent = '插件版本 ' + s.version; $('down').textContent = bytes(s.stats.downloadSpeed) + '/s'; $('up').textContent = bytes(s.stats.uploadSpeed) + '/s'; $('count').textContent = s.tasks.filter(t => live.includes(t.status)).length; $('free').textContent = bytes(s.free);
       $('errorBanner').hidden = !s.error; $('errorBanner').textContent = s.error;
       for (const id of ['newTask', 'pauseAll', 'resumeAll']) if (!$(id).hasAttribute('aria-busy')) $(id).disabled = !s.running;
@@ -109,8 +116,8 @@ var document = window.XiaomiPluginClient.document;
       if (!$('serviceStart').hasAttribute('aria-busy')) $('serviceStart').disabled = s.running;
       if (!$('serviceStop').hasAttribute('aria-busy')) $('serviceStop').disabled = !s.running;
       if (servicePending) {
-        if (s.running === (servicePending.command === 'start')) { toast('下载服务已' + (s.running ? '启动' : '停止')); servicePending = null; }
-        else if (Date.now() - servicePending.time > 50000) { toast('服务状态未按预期改变，请查看运行日志', true); servicePending = null; }
+        if (servicePending.command === 'restart' ? s.running && !s.bt?.restartRequired : s.running === (servicePending.command === 'start')) { toast(servicePending.command === 'restart' ? '下载核心已重启，BT 设置已生效' : '下载服务已' + (servicePending.command === 'start' ? '启动' : '停止')); servicePending = null; }
+        else if (Date.now() - servicePending.time > 90000) { toast('服务状态未按预期改变，请查看运行日志', true); servicePending = null; }
       }
       for (const [id, command] of [['serviceStart', 'start'], ['serviceStop', 'stop']]) {
         $(id).disabled = Boolean(servicePending) || (command === 'start' ? s.running : !s.running);
@@ -118,19 +125,36 @@ var document = window.XiaomiPluginClient.document;
       }
       $('serviceInfo').textContent = s.enabled ? '开机自动恢复已启用；暂停的任务仍保持暂停。' : '服务已停用；下次开机不会自动启动。';
       if (!settingsLoaded) { fillSettings(); settingsLoaded = true; }
+      if (!btLoaded) { fillBt(); btLoaded = true; }
+      const bt = s.bt || {};
+      $('btPort').textContent = 'BT 入站端口：' + (bt.peerPort || '未分配') + '（TCP / UDP）。有公网 IP 时需在路由器转发此端口，不要转发 RPC 管理端口。';
+      $('btIpv6Hint').textContent = bt.ipv6Detected ? '检测到系统 IPv6 接口信息；是否拥有可用公网 IPv6 及防火墙放行仍需确认。' : '尚未检测到系统 IPv6 接口信息，开启开关不代表网络已支持 IPv6。';
+      $('btApplyStatus').textContent = bt.restartRequired ? '已保存的 BT 参数尚未生效；下次启动应用，或点击下方按钮重启下载核心。' : (s.running ? '保存的 BT 参数与本次核心启动配置一致。' : '下次启动下载核心时应用已保存参数。');
+      const restarting = servicePending?.command === 'restart';
+      $('btRestart').disabled = !s.running || !bt.restartRequired || Boolean(servicePending) || s.coreUpdate?.state === 'installing';
+      if (restarting) $('btRestart').setAttribute('aria-busy', 'true'); else $('btRestart').removeAttribute('aria-busy');
       if (!trackersLoaded) { fillTrackers(); trackersLoaded = true; }
       $('trackerSummary').textContent = '当前附加 Tracker：' + s.settings.trackers.length + ' 个 · 订阅源：' + s.settings.sources.length + ' 个';
       $('trackerStatus').textContent = s.trackerStatus.message || '尚未更新订阅';
-      const core = s.coreUpdate || {}, coreBusy = ['pending', 'checking', 'downloading', 'installing'].includes(core.state);
+      const core = s.coreUpdate || {}, qb = s.qbUpdate || {}, phases = ['pending', 'checking', 'downloading', 'installing'];
+      const coreBusy = phases.includes(core.state), qbBusy = phases.includes(qb.state), updatingCore = coreBusy || qbBusy;
       $('coreVersion').textContent = '当前 ' + (s.engineVersion || core.current || '未读取') + (core.latest ? ' · 最新 ' + core.latest : '');
       $('coreStatus').textContent = core.message || '点击检查更新，获取静态核心发布渠道的最新版本。';
-      $('coreCheck').disabled = coreBusy; $('coreApply').disabled = coreBusy || !core.updateAvailable;
-      $('coreProxy').disabled = coreBusy;
+      $('coreCheck').disabled = updatingCore; $('coreApply').disabled = updatingCore || !core.updateAvailable;
+      $('coreProxy').disabled = updatingCore;
       for (const id of ['coreCheck', 'coreApply']) {
         if (coreBusy && (core.command === 'apply' ? id === 'coreApply' : id === 'coreCheck')) $(id).setAttribute('aria-busy', 'true');
         else $(id).removeAttribute('aria-busy');
       }
-      if (core.state === 'installing') { $('serviceStart').disabled = true; $('serviceStop').disabled = true; }
+      $('qbVersion').textContent = '当前 qBittorrent ' + (s.engines?.qbittorrent?.version || qb.current || '未读取') + ' · libtorrent ' + (s.engines?.qbittorrent?.libtorrent || qb.currentLibtorrent || '未读取') + (qb.latest ? '；最新 ' + qb.latest + ' / ' + qb.libtorrent : '');
+      $('qbStatus').textContent = qb.message || '检查兼容渠道的稳定构建，不自动跨大版本升级。';
+      $('qbCheck').disabled = updatingCore; $('qbApply').disabled = updatingCore || !qb.updateAvailable; $('qbProxy').disabled = updatingCore;
+      for (const id of ['qbCheck', 'qbApply']) {
+        if (qbBusy && (qb.command === 'apply' ? id === 'qbApply' : id === 'qbCheck')) $(id).setAttribute('aria-busy', 'true'); else $(id).removeAttribute('aria-busy');
+      }
+      if (core.state === 'installing' || qb.state === 'installing') { for (const id of ['serviceStart', 'serviceStop', 'btRestart']) $(id).disabled = true; }
+      const applied = s.trackerApply;
+      $('trackerApplyStatus').textContent = applied?.time ? '最近应用：qB 已追加 ' + (applied.qbApplied || 0) + ' 个任务，私有种子跳过 ' + (applied.qbPrivate || 0) + ' 个，等待元数据 ' + (applied.qbMetadata || 0) + ' 个，失败 ' + (applied.qbFailed || 0) + ' 个。追加成功不代表 Tracker 已连通。' : '';
       $('trackerResults').replaceChildren();
       (s.trackerStatus.sources || []).forEach(source => {
         const row = text('article', '', 'tracker-result');
@@ -145,10 +169,21 @@ var document = window.XiaomiPluginClient.document;
       // Do not replace buttons underneath an ongoing confirmation/operation.
       if (!dialogs().length && !document.querySelector('.task-card [aria-busy=true]')) renderTasks();
     } catch (e) { $('health').textContent = '连接失败'; $('errorBanner').hidden = false; $('errorBanner').textContent = e.message; }
-    finally { refreshing = false; }
   }
   $('refresh').onclick = () => busy($('refresh'), refresh);
   $('coreCheck').onclick = () => busy($('coreCheck'), async () => { await api('core_check', { proxy: $('coreProxy').checked }); await refresh(); });
+  $('qbCheck').onclick = () => busy($('qbCheck'), async () => { await api('qb_check', { proxy: $('qbProxy').checked }); await refresh(); });
+  $('qbApply').onclick = () => busy($('qbApply'), async () => {
+    if (!(await confirm('升级 qBittorrent 内核？', '校验下载文件后会短暂重启当前用户的两个下载核心，Openlist 共用的下载也会中断并恢复。保留任务和配置；新核心启动失败会尝试恢复原核心与状态。')).ok) return;
+    await api('qb_apply', { proxy: $('qbProxy').checked }); await refresh();
+  });
+  $('trackerVerify').onclick = () => busy($('trackerVerify'), async () => {
+    const box = $('trackerVerification'); box.replaceChildren(text('p', '正在读取 qB 任务的实际 Tracker…'));
+    try {
+      const r = await api('tracker_verify'); box.replaceChildren(text('p', '已保存 ' + r.configured + ' 个 Tracker；qB 当前 ' + r.tasks + ' 个任务。' + (!r.tasks ? '暂无任务，尚不能验证实际调用或连通情况。' : r.partial ? '本次仅核对前 ' + r.checked + ' 个任务。' : '')));
+      r.rows.forEach(t => { const row = text('article', '', 'tracker-result'); row.append(text('strong', t.name), text('p', (t.owned ? '下载中心' : '外部 / Openlist') + (t.private ? ' · 私有种子（不追加）' : '') + ' · 匹配附加列表 ' + t.matched + ' 个'), text('p', '实际 Tracker ' + t.total + ' 个，工作中 ' + t.working + ' 个，报告错误 ' + t.failed + ' 个。')); box.append(row); });
+    } catch (e) { box.replaceChildren(text('p', '核对失败：' + e.message)); throw e; }
+  });
   $('cleanCache').onclick = () => busy($('cleanCache'), async () => {
     const answer = await confirm('清理磁链缓存？', '仅删除插件内已无任务使用的自动种子和临时缓存。保留所有现有任务、下载文件、手动导入的种子及续传数据；不会扫描下载目录。请保持下载服务运行以核对占用。');
     if (!answer.ok) return;
@@ -164,13 +199,26 @@ var document = window.XiaomiPluginClient.document;
     await api('core_apply', { proxy: $('coreProxy').checked }); await refresh();
   });
   function fillSettings() { const s = snapshot.settings; defaultDirectory = s.directory; $('defaultDirectory').textContent = pathLabel(defaultDirectory); for (const id of ['concurrent', 'connections', 'downloadKiB', 'uploadKiB', 'seedRatio', 'seedMinutes']) $(id).value = s[id]; }
+  const btSwitches = ['ipv6', 'dht', 'pex', 'lpd', 'upnp'];
+  function fillBt() { const s = snapshot.settings; for (const key of btSwitches) $('bt-' + key).checked = Boolean(s[key]); $('bt-maxPeers').value = s.maxPeers ?? 100; $('bt-globalPeers').value = s.globalPeers ?? 300; }
+  $('btForm').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => {
+    const data = Object.fromEntries(btSwitches.map(key => [key, $('bt-' + key).checked]));
+    data.maxPeers = Number($('bt-maxPeers').value); data.globalPeers = Number($('bt-globalPeers').value);
+    const r = await api('bt_settings', data); toast(r.restartRequired ? '已保存，重启下载核心后生效；未中断当前任务' : 'BT 设置已保存'); await refresh(true);
+  }); };
+  $('btRestart').onclick = () => busy($('btRestart'), async () => {
+    if (!(await confirm('重启下载核心？', '仅重启当前用户的两个下载核心；共用此核心的 Openlist 下载也会短暂中断并从已保存的会话恢复；暂停任务仍保持暂停。不会重启 NAS 或删除文件。')).ok) return;
+    await api('service', { command: 'restart' }); servicePending = { command: 'restart', time: Date.now() }; toast('正在后台重启，完成后应用 BT 参数'); await refresh(true);
+  });
+  $('openlistInfo').onclick = () => busy($('openlistInfo'), async () => { const box = $('openlistDetails'); if (!box.hidden) { box.hidden = true; $('openlistUrl').value = ''; $('openlistInfo').textContent = '显示 Openlist 连接信息'; return; } const r = await api('openlist_info'); $('openlistUrl').value = r.url; $('openlistDirectory').textContent = '容器临时目录对应 NAS：' + r.directory; box.hidden = false; $('openlistInfo').textContent = '隐藏连接信息'; });
+  $('openlistCopy').onclick = () => busy($('openlistCopy'), async () => { try { await navigator.clipboard.writeText($('openlistUrl').value); toast('连接地址已复制，请勿公开'); } catch (_) { $('openlistUrl').focus(); $('openlistUrl').select(); toast('请长按或使用 Ctrl+C 复制选中的地址'); } });
   function fillTrackers() { const s = snapshot.settings; $('trackerText').value = (s.manualTrackers || s.trackers).join('\n'); $('trackerSources').value = s.sources.join('\n'); $('autoTrackers').checked = s.autoTrackers; }
   $('settingsForm').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { const data = { directory: defaultDirectory }; for (const id of ['concurrent', 'connections', 'downloadKiB', 'uploadKiB', 'seedRatio', 'seedMinutes']) data[id] = Number($(id).value); const r = await api('settings', data); toast(r.applied ? '设置已保存并应用' : '设置已保存，下次服务启动时生效'); await refresh(); }); };
   const lines = str => str.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   $('trackerForm').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { const r = await api('trackers', { trackers: lines($('trackerText').value), sources: lines($('trackerSources').value), autoTrackers: $('autoTrackers').checked }); toast(r.deferred ? '已保存，服务启动后生效' : '已应用，失败任务 ' + r.failed.length + ' 个'); await refresh(); }); };
   $('updateTrackers').onclick = () => busy($('updateTrackers'), async () => { await api('tracker_update'); toast('订阅在后台更新，可继续使用其他页面'); await refresh(); });
   $('resetTrackers').onclick = () => busy($('resetTrackers'), async () => { if (!(await confirm('恢复默认 Tracker 设置？', '清空手动与订阅列表，关闭自动更新。种子自带 Tracker 和 DHT 保留。')).ok) return; await api('trackers', { trackers: [], sources: [], autoTrackers: false }); trackersLoaded = false; await refresh(); });
-  for (const [id, command] of [['serviceStart', 'start'], ['serviceStop', 'stop']]) $(id).onclick = () => busy($(id), async () => { if (command === 'stop' && !(await confirm('停止下载服务？', '当前用户的所有下载和做种将停止，任务会保存；不会影响其他用户。')).ok) return; await api('service', { command }); servicePending = { command, time: Date.now() }; toast('服务操作已提交，状态将在几秒后刷新'); await refresh(); });
+  for (const [id, command] of [['serviceStart', 'start'], ['serviceStop', 'stop']]) $(id).onclick = () => busy($(id), async () => { if (command === 'stop' && !(await confirm('停止下载服务？', '当前用户的所有下载和做种将停止，Openlist 共用此核心的任务也会停止；任务会保存，不影响其他用户。')).ok) return; await api('service', { command }); servicePending = { command, time: Date.now() }; toast('服务操作已提交，状态将在几秒后刷新'); await refresh(); });
   for (const [id, command] of [['pauseAll', 'pause'], ['resumeAll', 'resume']]) $(id).onclick = () => busy($(id), async () => { if (command === 'resume' && !(await confirm('继续全部任务？', '当前用户所有暂停任务将继续下载或做种。')).ok) return; await api('batch', { command }); toast('已在后台执行，结果会自动刷新'); await refresh(); });
   $('clearHistory').onclick = () => busy($('clearHistory'), async () => { if (!(await confirm('清空历史记录？', '仅清除已完成、失败和取消的记录，保留所有文件；进行中的任务不受影响。')).ok) return; await api('clear_history'); toast('正在后台清理记录'); await refresh(); });
   function setKind(value) { kind = value; $('urlField').hidden = kind !== 'url'; $('nameField').hidden = kind !== 'url'; $('torrentField').hidden = kind !== 'torrent'; document.querySelectorAll('[data-kind]').forEach(b => b.classList.toggle('active', b.dataset.kind === kind)); }

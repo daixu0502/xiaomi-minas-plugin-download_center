@@ -10,6 +10,8 @@ import subprocess
 import sys
 import time
 import threading
+import re
+import tempfile
 from pathlib import Path
 from urllib.request import build_opener, ProxyHandler, Request
 from urllib.error import HTTPError, URLError
@@ -123,6 +125,41 @@ def _update_trackers(m):
         atomic_json(m.var / "tracker-status.json", result)
 
 
+def session_without_force_save(data, completed_gids=()):
+    """Preserve session tasks/options; drop only explicitly confirmed completed GIDs."""
+    completed = {gid.encode('ascii') for gid in completed_gids if re.fullmatch(r'[0-9a-f]{16}', gid)}
+    blocks, current = [], []
+    for line in data.splitlines(keepends=True):
+        if line.strip() and not line.startswith((b' ', b'\t', b'#')):
+            if current: blocks.append(current)
+            current = []
+        current.append(line)
+    if current: blocks.append(current)
+    output = []
+    for block in blocks:
+        gids = {line.strip()[4:] for line in block if line.startswith((b' ', b'\t')) and line.strip().startswith(b'gid=')}
+        if gids & completed:
+            continue
+        for line in block:
+            output.append(re.sub(rb'^([ \t]+force-save=)[^\r\n]*', rb'\g<1>false', line))
+    return b''.join(output)
+
+
+def normalize_aria_session(session, completed_gids=()):
+    original = session.read_bytes()
+    updated = session_without_force_save(original, completed_gids)
+    if updated == original: return
+    fd, name = tempfile.mkstemp(prefix='.aria-session-', dir=session.parent)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(updated)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, session)
+    finally:
+        if os.path.exists(name): os.unlink(name)
+
+
 def serve(m):
     m.ready()
     lock = (m.var / "supervisor.lock").open("a")
@@ -139,13 +176,14 @@ def serve(m):
     signal.signal(signal.SIGINT, lambda *_: stopping.__setitem__(0, True))
     session = m.var / "aria2.session"
     session.touch(mode=0o600, exist_ok=True)
+    normalize_aria_session(session)
     settings = m.settings()
     directory = m.directory(settings["directory"])
     conf = {"enable-rpc": "true", "rpc-listen-all": "false", "rpc-allow-origin-all": "false",
             "rpc-listen-port": (m.var / "rpc.port").read_text().strip(), "rpc-secret": (m.var / "rpc.secret").read_text().strip(),
             "listen-port": (m.var / "aria-peer.port").read_text().strip(), "dht-listen-port": (m.var / "aria-peer.port").read_text().strip(),
             "dir": str(directory), "input-file": str(session), "save-session": str(session), "save-session-interval": "15",
-            "save-not-found": "true", "force-save": "true", "continue": "true", "auto-file-renaming": "true",
+            "save-not-found": "true", "force-save": "false", "continue": "true", "auto-file-renaming": "true",
             "allow-overwrite": "false", "file-allocation": "none", "check-certificate": "true", "max-tries": "5", "retry-wait": "5",
             "connect-timeout": "15", "timeout": "60", "max-download-result": "1000", "follow-torrent": "false", "follow-metalink": "false",
             "bt-save-metadata": "false", "dht-file-path6": str(m.var / "dht6.dat"),

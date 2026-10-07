@@ -104,7 +104,8 @@ var document = window.XiaomiPluginClient.document;
     try {
       snapshot = await api('status'); const s = snapshot;
       $('health').textContent = s.running ? '服务运行中' : '服务未运行'; $('health').className = 'badge ' + (s.running ? 'enabled' : 'failed');
-      $('engine').textContent = 'BT：qBittorrent ' + (s.engines?.qbittorrent?.version || '未连接') + ' · 直链：aria2 ' + (s.engineVersion || '未连接');
+      $('qbEngineVersion').textContent = 'qBittorrent ' + (s.engines?.qbittorrent?.version || '未连接') + ' · BT／磁链';
+      $('ariaEngineVersion').textContent = 'aria2 ' + (s.engineVersion || '未连接') + ' · 直链';
       $('version').textContent = '插件版本 ' + s.version; $('down').textContent = bytes(s.stats.downloadSpeed) + '/s'; $('up').textContent = bytes(s.stats.uploadSpeed) + '/s'; $('count').textContent = s.tasks.filter(t => live.includes(t.status)).length; $('free').textContent = bytes(s.free);
       $('errorBanner').hidden = !s.error; $('errorBanner').textContent = s.error;
       for (const id of ['newTask', 'pauseAll', 'resumeAll']) if (!$(id).hasAttribute('aria-busy')) $(id).disabled = !s.running;

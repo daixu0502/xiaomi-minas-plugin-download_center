@@ -1,6 +1,13 @@
 # 小米智能存储下载中心
 
-插件版本 **1.1.2**。内置 **qBittorrent 5.2.4（libtorrent 2.0.15）**，HTTP／HTTPS／FTP／SFTP 直链保留 aria2。两个核心以所属普通用户独立运行，不依赖 Docker；现有插件界面、目录树、文件选择、Tracker 订阅与安全删除逻辑保留。
+插件版本 **1.1.3**。内置 **qBittorrent 5.2.4（libtorrent 2.0.15）**，HTTP／HTTPS／FTP／SFTP 直链保留 aria2。两个核心以所属普通用户独立运行，不依赖 Docker；现有插件界面、目录树、文件选择、Tracker 订阅与安全删除逻辑保留。
+
+## 1.1.3 更新
+
+- aria2 不再强制保留已完成任务的 `.aria2` 控制文件，避免 Openlist 将其作为普通文件转存。未完成任务仍支持断点续传；启动时纠正旧会话中显式保存的 `force-save` 参数，不扫描或删除下载文件。
+- 设置页双核心项目统一为 qBittorrent 在左、aria2 在右；窄屏依次排列 qBittorrent、aria2。接口状态、接口密钥、核心专属下载偏好和内核更新采用一致的顺序和布局。
+- Openlist 使用外部 aria2 时，应将 `config.json` 的 `temp_dir` 设置为当前用户空间内的真实绝对路径（例如 `/nas/pool0/<用户ID>/data/Download/OpenlistTemp`），并确保容器将该路径按相同路径读写挂载。不要将容器内 `/opt/openlist/data/temp` 别名传给 NAS 原生 aria2。修改前结束下载和转存任务，修改后重启 Openlist。安装器不自动修改第三方容器配置。
+- 已经被转存的控制文件不会自动删除。不要删除正在下载任务的 `.aria2` 文件。
 
 ## 1.1.2 更新
 

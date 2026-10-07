@@ -234,11 +234,8 @@
 [data-minas-plugin="downloadcenter"] .integration-notes summary{cursor:pointer;color:var(--text);line-height:1.7;}
 [data-minas-plugin="downloadcenter"] .integration-notes p{margin-top:10px;}
 [data-minas-plugin="downloadcenter"] #trackerVerification{margin-top:12px;}
-[data-minas-plugin="downloadcenter"] .core-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0;margin-bottom:16px;}
+[data-minas-plugin="downloadcenter"] .core-grid{margin-bottom:16px;}
 [data-minas-plugin="downloadcenter"] .core-grid > .panel{margin:0;min-width:0;}
-@media(min-width:1100px){
-[data-minas-plugin="downloadcenter"] .core-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;}
-}
 [data-minas-plugin="downloadcenter"] .bt-file-browser{display: block; width: 100%; max-width: 100%; max-height: none; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0px;}
 [data-minas-plugin="downloadcenter"] .bt-file-tools{display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap;}
 [data-minas-plugin="downloadcenter"] .bt-file-tools .bt-select-all{display: flex; align-items: center; gap: 7px; margin: 0px; color: var(--text); font-size: 13px; white-space: nowrap;}
@@ -266,10 +263,13 @@
 [data-minas-plugin="downloadcenter"] .bt-file-columns.with-progress, [data-minas-plugin="downloadcenter"] .bt-file-row.with-progress{grid-template-columns: minmax(0px, 1fr) 60px 42px;}
 [data-minas-plugin="downloadcenter"] .bt-file-name-cell{gap: 6px;}
 }
-[data-minas-plugin="downloadcenter"] .interface-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+[data-minas-plugin="downloadcenter"] .engine-grid,[data-minas-plugin="downloadcenter"] .interface-grid,[data-minas-plugin="downloadcenter"] .core-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;min-width:0;align-items:stretch;}
+[data-minas-plugin="downloadcenter"] .engine-grid > *{min-width:0;}
+[data-minas-plugin="downloadcenter"] .engine-summary{display:flex;flex-wrap:wrap;gap:4px 20px;}
+[data-minas-plugin="downloadcenter"] .engine-summary > span{min-width:0;overflow-wrap:anywhere;}
 [data-minas-plugin="downloadcenter"] .interface-item{min-width:0;padding:14px;background:var(--soft);border-radius:12px;}
 [data-minas-plugin="downloadcenter"] .interface-item h3{font-size:14px;margin:0 0 8px;}
 [data-minas-plugin="downloadcenter"] .interface-address{display:block;max-width:100%;overflow-wrap:anywhere;word-break:break-word;color:var(--text);font-size:13px;line-height:1.6;user-select:text;}
 [data-minas-plugin="downloadcenter"] .interface-state{color:var(--text);font-weight:600;}
-[data-minas-plugin="downloadcenter"] #credentialsForm .form-grid > label{min-width:0;margin-top:0;}
-@media(max-width:650px){[data-minas-plugin="downloadcenter"] .interface-grid{grid-template-columns:minmax(0,1fr);}}
+[data-minas-plugin="downloadcenter"] .engine-grid label{min-width:0;}
+@media(max-width:650px){[data-minas-plugin="downloadcenter"] .engine-grid,[data-minas-plugin="downloadcenter"] .interface-grid,[data-minas-plugin="downloadcenter"] .core-grid{grid-template-columns:minmax(0,1fr);}}

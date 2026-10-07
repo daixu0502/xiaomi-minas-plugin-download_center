@@ -76,7 +76,17 @@ const mock=()=>{
    await page.waitForFunction(()=>document.querySelector('#trackerVerification').textContent.includes('暂无任务'));
    await page.locator('[data-page=settings]').first().click();
    const order=await page.locator('#page-settings h2, #page-settings h3').allTextContents();
-   assert.deepEqual(order,['下载服务','局域网接口','qBittorrent · Openlist 接口','aria2 · RPC 接口','接口密钥','下载偏好','BT 网络与节点发现','Openlist 接入','qBittorrent 内核更新','aria2 内核更新','缓存清理','协议与边界']);
+   assert.deepEqual(order,['下载服务','局域网接口','qBittorrent · Openlist 接口','aria2 · RPC 接口','接口密钥','qBittorrent · Openlist 接口','aria2 · RPC 接口','下载偏好','qBittorrent · BT／磁链','aria2 · 直链','BT 网络与节点发现','Openlist 接入','qBittorrent 内核更新','aria2 内核更新','缓存清理','协议与边界']);
+   assert.deepEqual(await page.locator('#credentialsForm input').evaluateAll(es=>es.map(e=>e.id)),['qbSecret','ariaSecret']);
+   for(const selector of ['.interface-grid','#credentialsForm .engine-grid','#settingsForm .engine-grid','.core-grid']){
+    const boxes=await page.locator(selector).evaluate(e=>[...e.children].map(c=>{const b=c.getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,right:b.right};}));
+    assert.equal(boxes.length,2,selector+' engine count');
+    if(width>650){assert(boxes[0].x<boxes[1].x&&Math.abs(boxes[0].y-boxes[1].y)<2,selector+' QB left / aria2 right');}
+    else{assert(boxes[0].y<boxes[1].y&&Math.abs(boxes[0].x-boxes[1].x)<2,selector+' QB before aria2');}
+    assert(Math.abs(boxes[0].w-boxes[1].w)<2,selector+' unequal engine columns');
+   }
+   assert((await page.locator('#qbEngineVersion').textContent()).startsWith('qBittorrent'));
+   assert((await page.locator('#ariaEngineVersion').textContent()).startsWith('aria2'));
    assert((await page.locator('#ariaLanState').textContent()).includes('19300'));
    assert((await page.locator('#qbLanState').textContent()).includes('19700'));
    assert.equal(await page.locator('#qbProxy').locator('..').textContent(), await page.locator('#coreProxy').locator('..').textContent());
@@ -97,7 +107,7 @@ const mock=()=>{
    if(process.env.QB_UI_SCREENSHOTS){await page.locator('.interface-grid').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(process.env.QB_UI_SCREENSHOTS,name+'-lan.png')});}
    const grid=await page.locator('.core-grid').evaluate(e=>({w:e.clientWidth,scroll:e.scrollWidth,columns:getComputedStyle(e).gridTemplateColumns.split(' ').length}));
    assert(grid.scroll<=grid.w+1,'core cards overflow '+name);
-   assert.equal(grid.columns,width>=1100?2:1,'core card columns '+name);
+   assert.equal(grid.columns,width>650?2:1,'core card columns '+name);
    if(process.env.QB_UI_SCREENSHOTS){await page.locator('.core-grid').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(process.env.QB_UI_SCREENSHOTS,name+'-cores.png')});}
    const switchStyle=await page.locator('#bt-ipv6').evaluate(e=>({w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height,appearance:getComputedStyle(e).appearance}));
    assert(switchStyle.w>=40&&switchStyle.w<=48&&switchStyle.h<=30&&switchStyle.appearance==='none',JSON.stringify(switchStyle));

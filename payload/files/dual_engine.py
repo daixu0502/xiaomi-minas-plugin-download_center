@@ -7,7 +7,7 @@ import re
 import secrets
 import time
 from pathlib import Path, PurePosixPath
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, quote
 from download_lib import Manager, DownloadError, LIVE, MAX_TORRENT, atomic_json, torrent_info, valid_url
 from qb_client import QB, QB_DEFAULTS
 
@@ -82,6 +82,10 @@ class DualManager(Manager):
                 if t.get('engine') == 'qbittorrent': t.update(downloadSpeed='0', uploadSpeed='0')
         result['running'] = all(e['running'] for e in result['engines'].values())
         result['qbUpdate'] = self.qb_update_state()
+        from lan_rpc import status as lan_status
+        from service import live
+        result['lanInterfaces'] = lan_status(self)
+        result['credentialsEditable'] = not bool(live(self))
         try: result['trackerApply'] = json.loads((self.var / 'tracker-apply.json').read_text())
         except (OSError, ValueError): result['trackerApply'] = {}
         return result
@@ -390,6 +394,10 @@ class DualManager(Manager):
                 'partial': len(rows) < len(tasks)}
 
     def dispatch(self, action, data):
+        if action in ('credentials_get', 'credentials_save'):
+            from credentials import read, save
+            if action == 'credentials_save': return save(self, data)
+            with self.locked(): return read(self)
         if action in ('qb_check', 'qb_apply', 'tracker_verify'):
             with self.locked():
                 if action == 'tracker_verify': return self.verify_trackers()
@@ -399,6 +407,9 @@ class DualManager(Manager):
             with self.locked():
                 port = int((self.var / 'openlist.port').read_text())
                 password = (self.var / 'qb.secret').read_text().strip()
-                return {'url': 'http://downloadcenter:%s@127.0.0.1:%d/' % (password, port),
+                from openlist_gateway import lan_config
+                cfg = lan_config(self)
+                address = cfg[0] if cfg else '127.0.0.1'
+                return {'url': 'http://downloadcenter:%s@%s:%d/' % (quote(password, safe=''), address, port),
                         'directory': str(self.root / self.settings().get('openlistDirectory', 'Download'))}
         return super().dispatch(action, data)

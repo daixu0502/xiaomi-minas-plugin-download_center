@@ -25,16 +25,19 @@ def run(user, container):
     def command(*args):
         return subprocess.check_output([docker, *args], text=True, stderr=subprocess.DEVNULL, timeout=50)
     info = json.loads(command('inspect', container))[0]
-    if info['HostConfig']['NetworkMode'] != 'host': raise RuntimeError('Openlist must use host networking')
     volume = next(v for v in info['Mounts'] if v['Destination'] == '/opt/openlist/data')
     temporary = next(v for v in info['Mounts'] if v['Destination'] == '/opt/openlist/data/temp')
     home = Path('/home') / user / 'plugin/downloadcenter'
     sys.path.insert(0, str(home / 'src/files'))
     from service import manager
+    from openlist_gateway import lan_config
     m = manager(home)
+    lan = lan_config(m)
+    if info['HostConfig']['NetworkMode'] != 'host' and not lan:
+        raise RuntimeError('Bridge containers require the plugin LAN listener to be enabled')
     target = m.root / m.settings().get('openlistDirectory', 'Download')
     if Path(temporary['Source']).resolve() != target.resolve(): raise RuntimeError('Temporary directory mapping does not match')
-    endpoint = 'http://127.0.0.1:%d/' % int((m.var / 'openlist.port').read_text())
+    endpoint = 'http://%s:%d/' % (lan[0] if lan else '127.0.0.1', int((m.var / 'openlist.port').read_text()))
     secret = (m.var / 'qb.secret').read_text().strip()
     url = endpoint.replace('http://', 'http://downloadcenter:' + secret + '@')
     opener = build_opener(ProxyHandler({}), HTTPCookieProcessor(http.cookiejar.CookieJar()))

@@ -18,7 +18,7 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 MAX_TORRENT = 4 * 1024 * 1024
 DEFAULTS = {"directory": "", "concurrent": 3, "connections": 4, "downloadKiB": 0,
             "uploadKiB": 1024, "seedRatio": 1.0, "seedMinutes": 60,

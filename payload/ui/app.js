@@ -63,7 +63,7 @@ var document = window.XiaomiPluginClient.document;
     if (!can) e.preventDefault();
   }, { passive: false });
   document.addEventListener('touchend', e => { if (!swipe || dialogs().length) { swipe = null; return; } const dx = e.changedTouches[0].clientX - swipe[0], dy = e.changedTouches[0].clientY - swipe[1]; swipe = null; if (Math.abs(dx) > 85 && Math.abs(dx) > Math.abs(dy) * 2) { const pages = ['tasks', 'history', 'trackers', 'settings'], i = pages.indexOf(page) + (dx < 0 ? 1 : -1); if (pages[i]) go(pages[i]); } }, { passive: true });
-  function go(name) { page = name; document.querySelectorAll('.page').forEach(e => e.classList.toggle('active', e.id === 'page-' + name)); document.querySelectorAll('[data-page]').forEach(b => { b.classList.toggle('active', b.dataset.page === name); b.setAttribute('aria-current', b.dataset.page === name ? 'page' : 'false'); }); document.querySelector('.shell').scrollTop = 0; if (!document.documentElement.classList.contains('desktop-client')) window.scrollTo(0, 0); }
+  function go(name) { if (name !== 'settings') hideCredentials(); page = name; document.querySelectorAll('.page').forEach(e => e.classList.toggle('active', e.id === 'page-' + name)); document.querySelectorAll('[data-page]').forEach(b => { b.classList.toggle('active', b.dataset.page === name); b.setAttribute('aria-current', b.dataset.page === name ? 'page' : 'false'); }); document.querySelector('.shell').scrollTop = 0; if (!document.documentElement.classList.contains('desktop-client')) window.scrollTo(0, 0); }
   document.querySelectorAll('[data-page]').forEach(b => b.onclick = () => go(b.dataset.page));
   document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { filter = b.dataset.filter; document.querySelectorAll('[data-filter]').forEach(x => x.classList.toggle('active', x === b)); renderTasks(); });
   $('search').oninput = renderTasks;
@@ -124,6 +124,13 @@ var document = window.XiaomiPluginClient.document;
         if (servicePending?.command === command) $(id).setAttribute('aria-busy', 'true'); else $(id).removeAttribute('aria-busy');
       }
       $('serviceInfo').textContent = s.enabled ? '开机自动恢复已启用；暂停的任务仍保持暂停。' : '服务已停用；下次开机不会自动启动。';
+      for (const [key, prefix] of [['qbittorrent', 'qb'], ['aria2', 'aria']]) {
+        const item = s.lanInterfaces?.[key] || {};
+        $(prefix + 'LanState').textContent = item.listening ? '已开放 · 端口 ' + item.port : item.configured ? '未监听 · 配置端口 ' + item.port : '未开放到局域网';
+        $(prefix + 'LanUrl').textContent = item.url || '仅本机访问';
+      }
+      if (!$('credentialsSave').hasAttribute('aria-busy')) $('credentialsSave').disabled = !s.credentialsEditable || Boolean(servicePending);
+      $('credentialsStatus').textContent = s.credentialsEditable ? '服务已停止，可以保存密钥；保存后请启动服务。' : '服务运行期间不可修改密钥，请先停止下载服务。';
       if (!settingsLoaded) { fillSettings(); settingsLoaded = true; }
       if (!btLoaded) { fillBt(); btLoaded = true; }
       const bt = s.bt || {};
@@ -211,6 +218,29 @@ var document = window.XiaomiPluginClient.document;
     await api('service', { command: 'restart' }); servicePending = { command: 'restart', time: Date.now() }; toast('正在后台重启，完成后应用 BT 参数'); await refresh(true);
   });
   $('openlistInfo').onclick = () => busy($('openlistInfo'), async () => { const box = $('openlistDetails'); if (!box.hidden) { box.hidden = true; $('openlistUrl').value = ''; $('openlistInfo').textContent = '显示 Openlist 连接信息'; return; } const r = await api('openlist_info'); $('openlistUrl').value = r.url; $('openlistDirectory').textContent = '容器临时目录对应 NAS：' + r.directory; box.hidden = false; $('openlistInfo').textContent = '隐藏连接信息'; });
+  function hideCredentials() {
+    for (const id of ['ariaSecret', 'qbSecret']) { $(id).value = ''; $(id).type = 'password'; }
+    $('credentialsShow').textContent = '显示当前密钥';
+  }
+  $('credentialsShow').onclick = () => busy($('credentialsShow'), async () => {
+    if ($('ariaSecret').type === 'text') { hideCredentials(); return; }
+    const values = await api('credentials_get');
+    for (const [id, key] of [['ariaSecret', 'aria2'], ['qbSecret', 'qbittorrent']]) { $(id).value = values[key] || ''; $(id).type = 'text'; }
+    $('credentialsShow').textContent = '隐藏并清空';
+  });
+  $('credentialsForm').onsubmit = e => {
+    e.preventDefault();
+    busy($('credentialsSave'), async () => {
+      if (!snapshot?.credentialsEditable) throw new Error('请先停止下载服务');
+      const data = {aria2: $('ariaSecret').value, qbittorrent: $('qbSecret').value};
+      if (!data.aria2 && !data.qbittorrent) throw new Error('请至少填写一项新密钥');
+      if (!(await confirm('保存接口密钥？', '保存后请启动下载服务，并更新对应的 Openlist、AriaNg 等客户端密码；未填写的项目保持不变。')).ok) return;
+      const result = await api('credentials_save', data); hideCredentials();
+      toast(result.message); await refresh(true);
+    });
+  };
+  window.addEventListener('pagehide', hideCredentials);
+  window.addEventListener('unmount', hideCredentials);
   $('openlistCopy').onclick = () => busy($('openlistCopy'), async () => { try { await navigator.clipboard.writeText($('openlistUrl').value); toast('连接地址已复制，请勿公开'); } catch (_) { $('openlistUrl').focus(); $('openlistUrl').select(); toast('请长按或使用 Ctrl+C 复制选中的地址'); } });
   function fillTrackers() { const s = snapshot.settings; $('trackerText').value = (s.manualTrackers || s.trackers).join('\n'); $('trackerSources').value = s.sources.join('\n'); $('autoTrackers').checked = s.autoTrackers; }
   $('settingsForm').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { const data = { directory: defaultDirectory }; for (const id of ['concurrent', 'connections', 'downloadKiB', 'uploadKiB', 'seedRatio', 'seedMinutes']) data[id] = Number($(id).value); const r = await api('settings', data); toast(r.applied ? '设置已保存并应用' : '设置已保存，下次服务启动时生效'); await refresh(); }); };

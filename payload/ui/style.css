@@ -266,3 +266,10 @@
 [data-minas-plugin="downloadcenter"] .bt-file-columns.with-progress, [data-minas-plugin="downloadcenter"] .bt-file-row.with-progress{grid-template-columns: minmax(0px, 1fr) 60px 42px;}
 [data-minas-plugin="downloadcenter"] .bt-file-name-cell{gap: 6px;}
 }
+[data-minas-plugin="downloadcenter"] .interface-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+[data-minas-plugin="downloadcenter"] .interface-item{min-width:0;padding:14px;background:var(--soft);border-radius:12px;}
+[data-minas-plugin="downloadcenter"] .interface-item h3{font-size:14px;margin:0 0 8px;}
+[data-minas-plugin="downloadcenter"] .interface-address{display:block;max-width:100%;overflow-wrap:anywhere;word-break:break-word;color:var(--text);font-size:13px;line-height:1.6;user-select:text;}
+[data-minas-plugin="downloadcenter"] .interface-state{color:var(--text);font-weight:600;}
+[data-minas-plugin="downloadcenter"] #credentialsForm .form-grid > label{min-width:0;margin-top:0;}
+@media(max-width:650px){[data-minas-plugin="downloadcenter"] .interface-grid{grid-template-columns:minmax(0,1fr);}}

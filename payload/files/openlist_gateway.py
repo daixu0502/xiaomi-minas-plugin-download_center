@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Authenticated loopback adapter for Openlist 4.x; not a public reverse proxy.
+"""Authenticated loopback / opt-in LAN adapter for Openlist 4.x.
 
 Only Openlist-tagged tasks are exposed. Never forward settings, filesystem deletion,
 or arbitrary endpoints. Translate the container's temp alias to the owner's data.
 """
 import hmac
+import ipaddress
 import json
 import re
 import secrets
@@ -20,10 +21,27 @@ from qb_client import QB, added_ok
 from download_lib import DownloadError, valid_url
 
 
+def lan_config(m, filename='openlist-lan.json'):
+    path = m.var / filename
+    if not path.exists():
+        return None
+    value = json.loads(path.read_text())
+    address = ipaddress.IPv4Address(value['address'])
+    private = [ipaddress.IPv4Network(v) for v in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')]
+    if not any(address in block for block in private):
+        raise ValueError('Openlist LAN listener requires an RFC1918 address')
+    networks = [ipaddress.IPv4Network(v) for v in value['allowedNetworks']]
+    if not networks or not all(any(n.subnet_of(b) for b in private) for n in networks):
+        raise ValueError('Openlist LAN clients must use explicitly allowed private networks')
+    return str(address), networks
+
+
 class Gateway(ThreadingHTTPServer):
     daemon_threads = True
-    def __init__(self, m):
-        super().__init__(('127.0.0.1', int((m.var / 'openlist.port').read_text())), Handler)
+    def __init__(self, m, address='127.0.0.1', networks=None):
+        self.allowed_hosts = {'127.0.0.1', 'localhost'} if address == '127.0.0.1' else {address}
+        self.allowed_networks = networks or [ipaddress.IPv4Network('127.0.0.0/8')]
+        super().__init__((address, int((m.var / 'openlist.port').read_text())), Handler)
         self.m, self.sessions, self.session_lock = m, {}, threading.Lock()
 
 
@@ -45,10 +63,14 @@ class Handler(BaseHTTPRequestHandler):
     def handle_api(self):
         try:
             self.connection.settimeout(5)
+            peer = ipaddress.ip_address(self.client_address[0])
+            if not any(peer in network for network in self.server.allowed_networks):
+                return self.respond('Forbidden', 403)
             host = self.headers.get('Host', '').split(':')[0]
-            if host not in ('127.0.0.1', 'localhost'): return self.respond('Forbidden', 403)
+            if host not in self.server.allowed_hosts: return self.respond('Forbidden', 403)
             if self.headers.get('Origin') or self.headers.get('Sec-Fetch-Site'):
                 return self.respond('Browser access is disabled', 403)
+            if self.headers.get('Transfer-Encoding'): return self.respond('Forbidden', 403)
             length = int(self.headers.get('Content-Length', 0))
             if not 0 <= length <= 1024 * 1024: return self.respond('Too large', 413)
             url = urlsplit(self.path)
@@ -168,7 +190,47 @@ def owned(m, task):
     except (ValueError, KeyError, DownloadError): return False
 
 
+class GatewayGroup:
+    def __init__(self, m):
+        self.stopping = threading.Event()
+        self.servers = [Gateway(m)]
+        threading.Thread(target=self.servers[0].serve_forever, daemon=True).start()
+        # A delayed LAN interface at boot must not stop either download engine.
+        # Keep loopback available and retry the explicit LAN bind in background.
+        self.worker = threading.Thread(target=self.start_lan, args=(m,), daemon=True)
+        self.worker.start()
+
+    def start_lan(self, m):
+        try:
+            cfg = lan_config(m)
+        except (OSError, ValueError, KeyError, TypeError):
+            print('Openlist LAN configuration invalid; loopback remains available', flush=True)
+            return
+        if not cfg:
+            return
+        while not self.stopping.is_set():
+            try:
+                server = Gateway(m, *cfg)
+            except OSError:
+                self.stopping.wait(5)
+                continue
+            if self.stopping.is_set():
+                server.server_close()
+                return
+            self.servers.append(server)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            return
+
+    def shutdown(self):
+        self.stopping.set()
+        self.worker.join()
+        for server in self.servers:
+            server.shutdown()
+
+    def server_close(self):
+        for server in self.servers:
+            server.server_close()
+
+
 def start_gateway(m):
-    server = Gateway(m)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server
+    return GatewayGroup(m)

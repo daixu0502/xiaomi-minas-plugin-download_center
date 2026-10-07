@@ -154,7 +154,7 @@ def serve(m):
     path = m.var / "aria2.conf"
     path.write_text("\n".join(k + "=" + v for k, v in conf.items()) + "\n")
     os.chmod(path, 0o600)
-    child, qb_child, gateway = None, None, None
+    child, qb_child, gateway, aria_lan = None, None, None, None
     try:
         child = subprocess.Popen([str(core_path(m)), "--conf-path=" + str(path)], stdin=subprocess.DEVNULL,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -179,6 +179,8 @@ def serve(m):
         m.qb.mark_applied()
         from openlist_gateway import start_gateway
         gateway = start_gateway(m)
+        from lan_rpc import Listener
+        aria_lan = Listener(m)
         last_save, last_auto, tracker_worker = 0, time.time(), None
         while not stopping[0] and child.poll() is None and qb_child.poll() is None:
             m.ready()  # Pool lost: stop instead of writing into an empty mountpoint.
@@ -202,6 +204,8 @@ def serve(m):
                     break
                 time.sleep(.3)
     finally:
+        if aria_lan:
+            aria_lan.shutdown(); aria_lan.server_close()
         if gateway:
             gateway.shutdown(); gateway.server_close()
         if qb_child and qb_child.poll() is None:

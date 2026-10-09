@@ -1,6 +1,8 @@
 """No network: release checks, rollback and tracker application contracts."""
 import hashlib
 import json
+import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -21,6 +23,27 @@ class UpdateTests(unittest.TestCase):
         (home / 'var').mkdir(); (home / 'data').mkdir(); (home / 'src/files').mkdir(parents=True)
         self.m = DualManager(home, home / 'data', False)
         (home / 'src/files/qbittorrent-nox').write_bytes(b'old')
+
+    def test_version_probe_isolates_inherited_root_home(self):
+        seen = []
+        def probe(args, **kwargs):
+            env = kwargs['env']
+            self.assertNotEqual(env['HOME'], '/root')
+            self.assertTrue(Path(env['HOME']).is_dir())
+            for key in ('XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR'):
+                self.assertTrue(Path(env[key]).is_relative_to(env['HOME']))
+            seen.append(Path(env['HOME']))
+            return subprocess.CompletedProcess(args, 0, 'qBittorrent v5.2.4\n', '')
+        with patch.dict(os.environ, HOME='/root', XDG_CACHE_HOME='/root/.cache'), patch.object(update.subprocess, 'run', side_effect=probe):
+            self.assertEqual(update.binary_version(self.m.home / 'src/files/qbittorrent-nox'), '5.2.4')
+        self.assertFalse(seen[0].exists())
+
+    def test_version_probe_keeps_specific_failure(self):
+        for exc, message in ((subprocess.TimeoutExpired('qb', 10), '10 秒'),
+                             (subprocess.CalledProcessError(-6, 'qb'), '信号 6'),
+                             (PermissionError(13, 'denied'), 'errno=13')):
+            with patch.object(update.subprocess, 'run', side_effect=exc), self.assertRaisesRegex(DownloadError, message):
+                update.binary_version(self.m.home / 'src/files/qbittorrent-nox')
 
     def test_release_filters_and_requires_digest(self):
         def release(tag, **extra):

@@ -48,13 +48,27 @@ def parts(version):
 
 
 def binary_version(path):
+    # The NAS CGI launcher can retain HOME=/root after dropping privileges.
+    # Qt initializes standard directories even for --version. Never reuse the
+    # running core's profile or trust inherited HOME/XDG paths for this probe.
     try:
-        run = subprocess.run([str(path), '--version'], capture_output=True, text=True, check=True, timeout=10)
+        with tempfile.TemporaryDirectory(prefix='qb-version-') as folder:
+            env = dict(os.environ, HOME=folder,
+                       XDG_CONFIG_HOME=folder + '/config', XDG_CACHE_HOME=folder + '/cache',
+                       XDG_DATA_HOME=folder + '/data', XDG_STATE_HOME=folder + '/state',
+                       XDG_RUNTIME_DIR=folder)
+            run = subprocess.run([str(path), '--version'], stdin=subprocess.DEVNULL,
+                                 capture_output=True, text=True, check=True, timeout=10, env=env)
         match = re.search(r'qBittorrent v(\d+\.\d+\.\d+)', run.stdout)
-        if not match: raise ValueError()
+        if not match: raise DownloadError('qBittorrent 版本自检失败：输出中没有有效版本号')
         return match.group(1)
-    except (OSError, ValueError, subprocess.SubprocessError) as exc:
-        raise DownloadError('qBittorrent 核心自检失败') from exc
+    except subprocess.TimeoutExpired as exc:
+        raise DownloadError('qBittorrent 版本自检失败：执行超过 10 秒，请检查设备负载') from exc
+    except subprocess.CalledProcessError as exc:
+        detail = ('被信号 %d 终止' % -exc.returncode) if exc.returncode < 0 else ('退出码 %d' % exc.returncode)
+        raise DownloadError('qBittorrent 版本自检失败：' + detail + '，请检查核心是否可运行') from exc
+    except OSError as exc:
+        raise DownloadError('qBittorrent 版本自检失败：无法执行或创建临时目录（errno=%s）' % exc.errno) from exc
 
 
 def current(m):
@@ -169,7 +183,7 @@ def install_candidate(m, candidate, version):
 def queue(m, command, proxy=False):
     from core_update import state as aria_state
     if any(s.get('state') in BUSY for s in (state(m), aria_state(m))): raise DownloadError('已有核心检查或更新在执行，请稍后再试')
-    write_state(m, state='pending', command=command, message='正在准备 qBittorrent ' + ('检查' if command == 'check' else '更新'))
+    write_state(m, state='pending', command=command, message='正在准备' + ('检查更新…' if command == 'check' else '下载更新…'))
     try:
         with (m.var / 'qb-update.log').open('a') as log:
             subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()), command, str(m.home), 'proxy' if proxy else 'direct'],
@@ -189,21 +203,21 @@ def run(m, command, proxy):
             write_state(m, state='error', message='另一个核心正在更新，请稍后重试'); return
         common = {'command': command, 'proxy': proxy}
         try:
-            write_state(m, **common, state='checking', message='检查 qBittorrent 5 / libtorrent 2 稳定构建…')
+            write_state(m, **common, state='checking', message='正在检查当前渠道的最新版本…')
             installed, info = current(m), release(proxy)
             available = newer(info, installed)
             common.update(installed, latest=info['latest'], libtorrent=info['libtorrent'], updateAvailable=available)
             if command == 'check' or not available:
-                write_state(m, **common, state='done', message='发现新版，可下载并升级' if available else '已是当前兼容渠道的最新构建'); return
+                write_state(m, **common, state='done', message='发现新版本，可下载并更新。' if available else '当前已是此渠道的最新版本。'); return
             with tempfile.TemporaryDirectory(prefix='qb-download-', dir=m.var) as folder:
-                write_state(m, **common, state='downloading', message='下载 qBittorrent 并校验 SHA-256…')
+                write_state(m, **common, state='downloading', message='正在下载并校验 SHA-256…')
                 candidate = Path(folder) / 'qbittorrent-nox'
                 unpack(fetch(info['url'], proxy, 100 * 1024 * 1024), info, candidate)
-                write_state(m, **common, state='installing', message='保存任务状态并切换核心；Openlist 共用下载将短暂中断…')
+                write_state(m, **common, state='installing', message='正在保存任务并切换内核，下载将短暂中断…')
                 install_candidate(m, candidate, info['latest'])
             atomic_json(m.var / 'core/qb-release.json', {k: info[k] for k in ('latest', 'libtorrent', 'digest')})
             common.update(current=info['latest'], currentLibtorrent=info['libtorrent'], updateAvailable=False)
-            write_state(m, **common, state='done', message='qBittorrent 升级完成，任务、配置和 Openlist 连接已保留')
+            write_state(m, **common, state='done', message='更新完成，任务、设置和 Openlist 连接已保留。')
         except Exception as exc:
             write_state(m, **common, state='error', message=tracker_error(exc).replace('订阅', '核心发布源').replace('8 秒', '20 秒'))
 

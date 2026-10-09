@@ -16,6 +16,13 @@ QB_DEFAULTS = {'ipv6': False, 'dht': True, 'pex': True, 'lpd': True, 'upnp': Fal
                'maxPeers': 100, 'globalPeers': 300}
 
 
+class QBAPIError(DownloadError):
+    def __init__(self, endpoint, status):
+        self.status = status
+        self.endpoint = endpoint.split('?', 1)[0]
+        super().__init__('qBittorrent 接口错误（%s，HTTP %d）' % (self.endpoint, status))
+
+
 def added_ok(result):
     if isinstance(result, dict):
         return result.get('failure_count', 0) == 0 and result.get('success_count', 0) + result.get('pending_count', 0) > 0
@@ -66,18 +73,24 @@ class QB:
                 if self.request('auth/login', {'username': 'downloadcenter', 'password': password}, retry=False) not in ('Ok.', '') or not self.cookie:
                     raise DownloadError('qBittorrent 本机身份验证失败')
                 return self.request(path, data, raw, content_type, binary, retry=False)
-            raise DownloadError('qBittorrent 接口错误（HTTP %d）' % exc.code) from exc
+            raise QBAPIError(path, exc.code) from exc
         except DownloadError:
             raise
         except Exception as exc:
             raise DownloadError('qBittorrent 未就绪，请检查下载服务与日志') from exc
 
     def torrents(self, hash_value=None):
-        query = '?hashes=' + hash_value if hash_value else ''
-        return self.request('torrents/info' + query)
+        # Hybrid torrents can switch their API hash after metadata arrives.
+        # qB's hashes filter may no longer recognize the original v1 hash.
+        items = self.request('torrents/info')
+        return [v for v in items if hash_value in (v.get('hash'), v.get('infohash_v1'), v.get('infohash_v2'))] if hash_value else items
 
     def files(self, hash_value):
-        return self.request('torrents/files?hash=' + hash_value)
+        try:
+            return self.request('torrents/files?hash=' + hash_value)
+        except QBAPIError as exc:
+            if exc.status == 409: return []  # Metadata not yet available.
+            raise
 
     def add(self, source, save_path, metadata=False):
         fields = {'savepath': str(save_path), 'autoTMM': 'false', 'contentLayout': 'NoSubfolder',

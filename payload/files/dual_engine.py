@@ -9,7 +9,7 @@ import time
 from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, urlsplit, quote
 from download_lib import Manager, DownloadError, LIVE, MAX_TORRENT, atomic_json, torrent_info, valid_url
-from qb_client import QB, QB_DEFAULTS
+from qb_client import QB, QB_DEFAULTS, QBAPIError
 
 
 class DualManager(Manager):
@@ -37,6 +37,26 @@ class DualManager(Manager):
             db.execute('UPDATE tasks SET snapshot=? WHERE id=?', (json.dumps(snap), row['id']))
             if source is not None:
                 db.execute('UPDATE tasks SET source=? WHERE id=?', (json.dumps(source), row['id']))
+
+    def resolve_qb_row(self, row, items=None):
+        """Rebind a hybrid torrent by cryptographic identity, never by name/path."""
+        snap = json.loads(row['snapshot'])
+        expected = snap.get('infoHash', row['gid'])
+        items = self.qb.torrents() if items is None else items
+        matches = [item for item in items if row['gid'] == item.get('hash') or expected == item.get('infohash_v1')]
+        if len(matches) != 1: return row, None
+        item = matches[0]
+        canonical = item['hash']
+        if not re.fullmatch('[0-9a-f]{40}', canonical): raise DownloadError('qBittorrent 任务标识格式异常')
+        if canonical != row['gid']:
+            # Preserve the original v1 identity for exported metadata validation.
+            snap.setdefault('infoHash', row['gid'])
+            with self.db() as db:
+                if db.execute('SELECT 1 FROM tasks WHERE gid=? AND id<>?', (canonical, row['id'])).fetchone():
+                    raise DownloadError('此混合种子已关联另一条任务，拒绝重复接管')
+                db.execute('UPDATE tasks SET gid=?, snapshot=? WHERE id=?', (canonical, json.dumps(snap), row['id']))
+            row = dict(row, gid=canonical, snapshot=json.dumps(snap))
+        return row, item
 
     def bt_state(self):
         try:
@@ -192,9 +212,13 @@ class DualManager(Manager):
             self.qb.request('torrents/stop', {'hashes': row['gid']})
             return snap
         if snap.get('metadataPending'):
-            raw = self.qb.request('torrents/export?hash=' + row['gid'], binary=True)
+            try:
+                raw = self.qb.request('torrents/export?hash=' + row['gid'], binary=True)
+            except QBAPIError as exc:
+                if exc.status == 409: return snap  # Metadata/piece layers still pending.
+                raise
             info = torrent_info(raw)
-            if info['infoHash'] != row['gid']: raise DownloadError('磁链元数据哈希不一致')
+            if info['infoHash'] != snap.get('infoHash', row['gid']): raise DownloadError('磁链元数据哈希不一致')
             if len(info['files']) > 2000: raise DownloadError('磁链超过 2000 个文件')
             location, opts, paths = self.bt_options(info, snap['directory'])
             source.update(torrent=base64.b64encode(raw).decode(), selected=','.join(f['index'] for f in info['files']))
@@ -225,10 +249,10 @@ class DualManager(Manager):
         if ident is None: super().sync()
         rows = [self.row(ident)] if ident else [r for r in self.rows() if self.is_qb(r)]
         if not rows: return
-        items = {v['hash']: v for v in self.qb.torrents(rows[0]['gid'] if ident else None)}
+        items = self.qb.torrents()
         for row in rows:
+            row, item = self.resolve_qb_row(row, items)
             snap = json.loads(row['snapshot'])
-            item = items.get(row['gid'])
             if item is None:
                 if snap['status'] in LIVE and time.time() - snap.get('addedAt', 0) > 30:
                     snap.update(status='error', errorMessage='qBittorrent 中未找到任务，可重试恢复', downloadSpeed='0', uploadSpeed='0')
@@ -259,6 +283,7 @@ class DualManager(Manager):
     def operate(self, ident, command, delete_files=False):
         row = self.row(ident)
         if not self.is_qb(row): return super().operate(ident, command, delete_files)
+        row, _ = self.resolve_qb_row(row)
         snap, source = json.loads(row['snapshot']), json.loads(row['source'])
         gid = row['gid']
         if command in ('pause', 'resume'):
@@ -281,6 +306,16 @@ class DualManager(Manager):
             if snap['status'] not in ('error', 'removed'): raise DownloadError('仅失败任务可以重试')
             existing = self.qb.torrents(gid)
             if existing:
+                if snap.get('metadataPending'):
+                    expected = self.var / 'metadata' / ident
+                    if Path(existing[0]['save_path']) != expected:
+                        raise DownloadError('磁链缓存路径已改变，拒绝继续')
+                    # No file list/export exists yet; resume metadata only.
+                    self.qb.request('torrents/start', {'hashes': gid})
+                    source['requestedPause'] = False
+                    snap.update(status='waiting', errorMessage='', initializing=True, addedAt=time.time())
+                    self.save_row(row, snap, source)
+                    return {}
                 self.validated_files(row, self.qb.files(gid))
                 if Path(existing[0]['save_path']) != self.root / snap['directory']: raise DownloadError('任务路径已改变')
                 self.qb.request('torrents/recheck', {'hashes': gid})
@@ -316,6 +351,7 @@ class DualManager(Manager):
     def detail(self, ident, offset=0):
         row = self.row(ident)
         if not self.is_qb(row): return super().detail(ident, offset)
+        row, _ = self.resolve_qb_row(row)
         snap = json.loads(row['snapshot'])
         files = self.qb.files(row['gid'])
         offset = max(0, int(offset))
@@ -330,6 +366,7 @@ class DualManager(Manager):
     def select_files(self, data):
         row = self.row(data.get('id'))
         if not self.is_qb(row): return super().select_files(data)
+        row, _ = self.resolve_qb_row(row)
         item = self.qb.torrents(row['gid'])
         if not item or not item[0]['state'].startswith(('stopped', 'paused')): raise DownloadError('请先暂停任务再选择文件')
         files = self.qb.files(row['gid'])

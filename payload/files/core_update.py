@@ -164,7 +164,7 @@ def queue(m, command, proxy=False):
     previous = state(m)
     if previous.get('state') in BUSY and time.time() - previous.get('time', 0) < 900:
         raise DownloadError('已有核心检查或更新正在执行，请稍后查看结果')
-    write_state(m, state='pending', command=command, message='正在准备核心' + ('检查' if command == 'check' else '更新'))
+    write_state(m, state='pending', command=command, message='正在准备' + ('检查更新…' if command == 'check' else '下载更新…'))
     try:
         with (m.var/'core-update.log').open('a') as log:
             subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()), command, str(m.home), 'proxy' if proxy else 'direct'],
@@ -185,22 +185,22 @@ def run(m, command, proxy):
         except BlockingIOError: return
         common = {'command': command, 'proxy': proxy}
         try:
-            write_state(m, **common, state='checking', message='正在检查静态核心发布版本…')
+            write_state(m, **common, state='checking', message='正在检查当前渠道的最新版本…')
             current = binary_version(core_path(m))
             info = release(proxy)
             available = version_tuple(info['latest']) > version_tuple(current)
             common.update(current=current, latest=info['latest'], updateAvailable=available)
             if command == 'check' or not available:
-                write_state(m, **common, state='done', message='发现新版本，可下载并更新' if available else '当前已是此构建渠道的最新版本')
+                write_state(m, **common, state='done', message='发现新版本，可下载并更新。' if available else '当前已是此渠道的最新版本。')
                 return
             with tempfile.TemporaryDirectory(prefix='core-download-', dir=m.var) as folder:
-                write_state(m, **common, state='downloading', message='正在下载并校验核心 SHA-256…')
+                write_state(m, **common, state='downloading', message='正在下载并校验 SHA-256…')
                 candidate = Path(folder)/'aria2c'
                 unpack(fetch(info['url'], proxy, 40 * 1024 * 1024), info, candidate)
-                write_state(m, **common, state='installing', message='正在保存会话并切换核心，下载将短暂中断…')
+                write_state(m, **common, state='installing', message='正在保存任务并切换内核，下载将短暂中断…')
                 install_candidate(m, candidate, info['latest'])
             common.update(current=info['latest'], updateAvailable=False)
-            write_state(m, **common, state='done', message='核心更新成功，任务与设置已保留')
+            write_state(m, **common, state='done', message='更新完成，任务、设置和 Openlist 连接已保留。')
         except Exception as exc:
             # Shared network formatter mentions subscriptions; use core terminology.
             message = tracker_error(exc).replace('订阅', '核心发布源').replace('8 秒', '20 秒')

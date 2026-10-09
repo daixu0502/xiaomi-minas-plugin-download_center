@@ -13,6 +13,15 @@ var document = window.XiaomiPluginClient.document;
   const text = (tag, value, cls) => { const el = document.createElement(tag); el.textContent = value; if (cls) el.className = cls; return el; };
   const bytes = n => { n = Number(n) || 0; const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return n.toFixed(i ? 1 : 0) + ' ' + units[i]; };
   const pathLabel = s => '我的文件' + (s ? ' / ' + s : '');
+  function renderCoreStatus(id, state) {
+    const el = $(id), busy = ['pending', 'checking', 'downloading', 'installing'].includes(state.state);
+    const prompts = { pending: '正在准备' + (state.command === 'apply' ? '下载更新…' : '检查更新…'), checking: '正在检查当前渠道的最新版本…', downloading: '正在下载并校验 SHA-256…', installing: '正在保存任务并切换内核，下载将短暂中断…' };
+    el.dataset.state = state.state === 'error' ? 'error' : busy ? 'busy' : state.state === 'done' ? 'done' : 'idle';
+    let message = prompts[state.state] || state.message || '点击“检查更新”获取当前渠道的最新版本。';
+    if (state.state === 'done' && state.command === 'check') message = state.updateAvailable ? '发现新版本，可下载并更新。' : '当前已是此渠道的最新版本。';
+    if (state.state === 'error') message = (state.command === 'apply' ? '更新失败：' : '检查失败：') + (state.message || '请稍后重试。');
+    if (el.textContent !== message) el.textContent = message;
+  }
   function toast(message, error = false) { $('toast').textContent = message; $('toast').classList.toggle('error', error); clearTimeout(toast.timer); toast.timer = setTimeout(() => { $('toast').textContent = ''; }, 6000); }
   async function api(action, data = {}) {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 25000);
@@ -146,16 +155,16 @@ var document = window.XiaomiPluginClient.document;
       $('trackerStatus').textContent = s.trackerStatus.message || '尚未更新订阅';
       const core = s.coreUpdate || {}, qb = s.qbUpdate || {}, phases = ['pending', 'checking', 'downloading', 'installing'];
       const coreBusy = phases.includes(core.state), qbBusy = phases.includes(qb.state), updatingCore = coreBusy || qbBusy;
-      $('coreVersion').textContent = '当前 ' + (s.engineVersion || core.current || '未读取') + (core.latest ? ' · 最新 ' + core.latest : '');
-      $('coreStatus').textContent = core.message || '点击检查更新，获取静态核心发布渠道的最新版本。';
+      $('coreVersion').textContent = '当前版本：' + (s.engineVersion || core.current || '未读取') + (core.latest ? ' · 最新版本：' + core.latest : '');
+      renderCoreStatus('coreStatus', core);
       $('coreCheck').disabled = updatingCore; $('coreApply').disabled = updatingCore || !core.updateAvailable;
       $('coreProxy').disabled = updatingCore;
       for (const id of ['coreCheck', 'coreApply']) {
         if (coreBusy && (core.command === 'apply' ? id === 'coreApply' : id === 'coreCheck')) $(id).setAttribute('aria-busy', 'true');
         else $(id).removeAttribute('aria-busy');
       }
-      $('qbVersion').textContent = '当前 qBittorrent ' + (s.engines?.qbittorrent?.version || qb.current || '未读取') + ' · libtorrent ' + (s.engines?.qbittorrent?.libtorrent || qb.currentLibtorrent || '未读取') + (qb.latest ? '；最新 ' + qb.latest + ' / ' + qb.libtorrent : '');
-      $('qbStatus').textContent = qb.message || '检查兼容渠道的稳定构建，不自动跨大版本升级。';
+      $('qbVersion').textContent = '当前版本：' + (s.engines?.qbittorrent?.version || qb.current || '未读取') + '（libtorrent ' + (s.engines?.qbittorrent?.libtorrent || qb.currentLibtorrent || '未读取') + '）' + (qb.latest ? ' · 最新版本：' + qb.latest + '（libtorrent ' + qb.libtorrent + '）' : '');
+      renderCoreStatus('qbStatus', qb);
       $('qbCheck').disabled = updatingCore; $('qbApply').disabled = updatingCore || !qb.updateAvailable; $('qbProxy').disabled = updatingCore;
       for (const id of ['qbCheck', 'qbApply']) {
         if (qbBusy && (qb.command === 'apply' ? id === 'qbApply' : id === 'qbCheck')) $(id).setAttribute('aria-busy', 'true'); else $(id).removeAttribute('aria-busy');
@@ -182,7 +191,7 @@ var document = window.XiaomiPluginClient.document;
   $('coreCheck').onclick = () => busy($('coreCheck'), async () => { await api('core_check', { proxy: $('coreProxy').checked }); await refresh(); });
   $('qbCheck').onclick = () => busy($('qbCheck'), async () => { await api('qb_check', { proxy: $('qbProxy').checked }); await refresh(); });
   $('qbApply').onclick = () => busy($('qbApply'), async () => {
-    if (!(await confirm('升级 qBittorrent 内核？', '校验下载文件后会短暂重启当前用户的两个下载核心，Openlist 共用的下载也会中断并恢复。保留任务和配置；新核心启动失败会尝试恢复原核心与状态。')).ok) return;
+    if (!(await confirm('更新 qBittorrent 内核？', '将下载第三方静态构建并校验 SHA-256 与设备架构。切换时会短暂重启当前用户的下载核心，Openlist 共用下载也会中断；任务和设置保留，启动失败会尝试恢复原内核与状态。')).ok) return;
     await api('qb_apply', { proxy: $('qbProxy').checked }); await refresh();
   });
   $('trackerVerify').onclick = () => busy($('trackerVerify'), async () => {
@@ -203,7 +212,7 @@ var document = window.XiaomiPluginClient.document;
     $('cacheStatus').textContent = message; toast(result.failed.length ? '清理完成，部分缓存已保留，请查看结果' : '磁链缓存清理完成', result.failed.length > 0);
   });
   $('coreApply').onclick = () => busy($('coreApply'), async () => {
-    if (!(await confirm('更新 aria2 核心？', '将从第三方静态构建发布渠道下载并校验 SHA-256。切换时下载会短暂中断，任务和设置保留；启动失败会恢复旧核心。')).ok) return;
+    if (!(await confirm('更新 aria2 内核？', '将下载第三方静态构建并校验 SHA-256 与设备架构。切换时会短暂重启当前用户的下载核心，Openlist 共用下载也会中断；任务和设置保留，启动失败会尝试恢复原内核与状态。')).ok) return;
     await api('core_apply', { proxy: $('coreProxy').checked }); await refresh();
   });
   function fillSettings() { const s = snapshot.settings; defaultDirectory = s.directory; $('defaultDirectory').textContent = pathLabel(defaultDirectory); for (const id of ['concurrent', 'connections', 'downloadKiB', 'uploadKiB', 'seedRatio', 'seedMinutes']) $(id).value = s[id]; }

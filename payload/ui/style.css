@@ -272,4 +272,20 @@
 [data-minas-plugin="downloadcenter"] .interface-address{display:block;max-width:100%;overflow-wrap:anywhere;word-break:break-word;color:var(--text);font-size:13px;line-height:1.6;user-select:text;}
 [data-minas-plugin="downloadcenter"] .interface-state{color:var(--text);font-weight:600;}
 [data-minas-plugin="downloadcenter"] .engine-grid label{min-width:0;}
+[data-minas-plugin="downloadcenter"] .core-grid .core-panel{display:flex;flex-direction:column;gap:10px;min-width:0;}
+[data-minas-plugin="downloadcenter"] .core-grid .core-version{font-size:13px;line-height:1.65;overflow-wrap:anywhere;}
+[data-minas-plugin="downloadcenter"] .core-grid .core-description{font-size:14px;line-height:1.7;}
+[data-minas-plugin="downloadcenter"] .core-source{font-size:13px;color:var(--muted);overflow-wrap:anywhere;}
+[data-minas-plugin="downloadcenter"] .core-source summary{cursor:pointer;color:var(--text);padding:4px 0;}
+[data-minas-plugin="downloadcenter"] .core-source p{padding-top:6px;font-size:13px;}
+[data-minas-plugin="downloadcenter"] .core-controls{margin-top:auto;display:grid;gap:12px;min-width:0;}
+[data-minas-plugin="downloadcenter"] .core-controls .delete-option{margin:0;align-items:flex-start;gap:10px;}
+[data-minas-plugin="downloadcenter"] .core-controls .delete-option input{flex:none;margin-top:4px;}
+[data-minas-plugin="downloadcenter"] .core-controls .delete-option span{min-width:0;overflow-wrap:anywhere;}
+[data-minas-plugin="downloadcenter"] .core-controls small{display:block;color:var(--muted);font-size:12px;}
+[data-minas-plugin="downloadcenter"] .core-controls .actions{margin:0;flex-wrap:wrap;}
+[data-minas-plugin="downloadcenter"] .core-grid .core-status{margin:0;min-height:4.6em;box-sizing:border-box;padding:10px 12px;border-radius:10px;background:var(--bg);color:var(--muted);font-size:13px;line-height:1.7;overflow-wrap:anywhere;}
+[data-minas-plugin="downloadcenter"] .core-grid .core-status[data-state="error"]{color:var(--danger);background:var(--danger-soft);}
+[data-minas-plugin="downloadcenter"] .core-grid .core-status[data-state="busy"]{color:var(--accent);background:var(--soft);}
+[data-minas-plugin="downloadcenter"] .core-grid .core-status[data-state="done"]{color:var(--success);}
 @media(max-width:650px){[data-minas-plugin="downloadcenter"] .engine-grid,[data-minas-plugin="downloadcenter"] .interface-grid,[data-minas-plugin="downloadcenter"] .core-grid{grid-template-columns:minmax(0,1fr);}}

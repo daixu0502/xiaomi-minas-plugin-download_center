@@ -16,6 +16,7 @@ import zipfile
 from pathlib import Path
 from urllib.request import Request, ProxyHandler, build_opener
 
+sys.dont_write_bytecode = True
 from download_lib import DownloadError, atomic_json, core_path
 from fetch_core import ASSETS
 
@@ -118,6 +119,8 @@ def wait_running(m, expected):
 def install_candidate(m, candidate, version):
     from service import control_locked, live
     target = m.var / 'core/aria2c'
+    if target.parent.is_symlink() or target.is_symlink():
+        raise DownloadError('核心目录异常，拒绝更新')
     target.parent.mkdir(mode=0o700, exist_ok=True)
     # Never modify src: firmware verifies it at boot and uninstalls on mismatch.
     # Staging and rollback stay on the runtime filesystem for atomic replacement.

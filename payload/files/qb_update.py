@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+sys.dont_write_bytecode = True
 from download_lib import DownloadError, atomic_json
 from core_update import fetch, BUSY
 from fetch_qb import RELEASE, ASSETS
@@ -133,6 +134,8 @@ def wait_running(m, expected):
 def install_candidate(m, candidate, version):
     from service import control_locked, live
     target = m.var / 'core/qbittorrent-nox'
+    if target.parent.is_symlink() or target.is_symlink():
+        raise DownloadError('核心目录异常，拒绝更新')
     target.parent.mkdir(mode=0o700, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.qb-update-', dir=target.parent) as folder:
         stage = Path(folder)

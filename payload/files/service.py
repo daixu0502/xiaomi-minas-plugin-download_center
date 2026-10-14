@@ -15,6 +15,7 @@ import tempfile
 from pathlib import Path
 from urllib.request import build_opener, ProxyHandler, Request
 from urllib.error import HTTPError, URLError
+sys.dont_write_bytecode = True
 from download_lib import Manager, DownloadError, atomic_json, parse_tracker_subscription, tracker_cache, merged_trackers, core_path
 from dual_engine import DualManager
 
@@ -195,7 +196,7 @@ def serve(m):
     child, qb_child, gateway, aria_lan = None, None, None, None
     try:
         child = subprocess.Popen([str(core_path(m)), "--conf-path=" + str(path)], stdin=subprocess.DEVNULL,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, cwd=m.var)
         profile = m.qb.prepare()
         qb_log = m.var / 'qbittorrent.log'
         if qb_log.exists() and qb_log.stat().st_size > 2 * 1024 * 1024:
@@ -203,7 +204,7 @@ def serve(m):
         with qb_log.open('a') as output:
             from qb_update import core_path as qb_core_path
             qb_child = subprocess.Popen([str(qb_core_path(m)), '--profile=' + str(profile),
-                                         '--confirm-legal-notice'], stdin=subprocess.DEVNULL, stdout=output, stderr=output)
+                                         '--confirm-legal-notice'], stdin=subprocess.DEVNULL, stdout=output, stderr=output, cwd=m.var)
         for _ in range(20):
             if child.poll() is not None or qb_child.poll() is not None:
                 raise DownloadError("下载核心启动失败，请查看 aria2.log / qbittorrent.log")
@@ -312,7 +313,7 @@ def control_locked(m, command):
         os.replace(logfile, m.var / "service.log.1")
     with logfile.open("a") as out:
         subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()), "serve", str(m.home)],
-                         stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True, close_fds=True)
+                         stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True, close_fds=True, cwd=m.var)
 
 
 if __name__ == "__main__":

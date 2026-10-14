@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'payload/files'))
 from integrity import source_abstract
 from download_lib import core_path, DownloadError
 import core_update
+import qb_update
 import service
 
 
@@ -61,6 +62,28 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(core_path(self.m).read_bytes(), b'old-core')
         self.assertTrue((self.m.var / 'enabled').exists())
         self.assertEqual(source_abstract(self.m.home / 'src'), before)
+
+    def test_qb_update_and_rollback_preserve_full_source_digest(self):
+        binary=self.m.home/'src/files/qbittorrent-nox'
+        binary.write_bytes(b'old-qb')
+        before=source_abstract(self.m.home/'src')
+        with patch.object(service,'live',return_value=0), patch.object(service,'control_locked'), \
+                patch.object(qb_update,'binary_version',return_value='5.2.4'), patch.object(qb_update,'wait_running'):
+            qb_update.install_candidate(self.m,self.candidate,'5.2.5')
+        self.assertEqual(source_abstract(self.m.home/'src'),before)
+        self.assertEqual(qb_update.core_path(self.m).read_bytes(),b'new-core')
+        with patch.object(service,'live',return_value=1), patch.object(service,'control_locked'), \
+                patch.object(qb_update,'binary_version',return_value='5.2.5'), \
+                patch.object(qb_update,'wait_running',side_effect=[DownloadError('failed'),None]):
+            with self.assertRaises(DownloadError):qb_update.install_candidate(self.m,self.candidate,'5.2.6')
+        self.assertEqual(source_abstract(self.m.home/'src'),before)
+
+    def test_runtime_symlink_cannot_modify_source(self):
+        (self.m.var/'core').symlink_to(self.m.home/'src/files',target_is_directory=True)
+        before=source_abstract(self.m.home/'src')
+        for updater in (core_update,qb_update):
+            with self.assertRaises(DownloadError):updater.install_candidate(self.m,self.candidate,'1.2.3')
+        self.assertEqual(source_abstract(self.m.home/'src'),before)
 
 
 if __name__ == '__main__':

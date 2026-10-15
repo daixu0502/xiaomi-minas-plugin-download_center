@@ -18,10 +18,10 @@
 [data-minas-plugin="downloadcenter"] .form-body .weekday-picks{display: grid; grid-template-columns: repeat(7, minmax(0px, 1fr)); gap: 5px;}
 [data-minas-plugin="downloadcenter"] .form-body .weekday-picks label{display: flex; align-items: center; flex-direction: column; padding: 6px 0px; border-radius: 9px; background: var(--bg);}
 [data-minas-plugin="downloadcenter"] .form-body .weekday-picks input{width: 18px; min-height: 18px; margin: 0px;}
-[data-minas-plugin="downloadcenter"] .form-body label span{font-size: 12px; font-weight: 400; line-height: 1.6; overflow-wrap: anywhere;}
+[data-minas-plugin="downloadcenter"] .form-body label span{font-size:13px; font-weight: 400; line-height: 1.6; overflow-wrap: anywhere;}
 [data-minas-plugin="downloadcenter"] .form-body .field-box > label + label{margin-top: 0px;}
 [data-minas-plugin="downloadcenter"] #cleanupSummary{white-space: pre-wrap;}
-[data-minas-plugin="downloadcenter"] #cleanupSamples{margin: 0px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px / 1.7 ui-monospace, monospace;}
+[data-minas-plugin="downloadcenter"] #cleanupSamples{margin: 0px; white-space: pre-wrap; overflow-wrap: anywhere; font:15px/1.75 var(--font-code);}
 [data-minas-plugin="downloadcenter"] #schedulePreview{line-height: 1.8;}
 [data-minas-plugin="downloadcenter"] .form-body input:disabled{opacity: 0.45;}
 [data-minas-plugin="downloadcenter"] *{box-sizing: border-box; -webkit-tap-highlight-color: transparent;}
@@ -48,7 +48,7 @@
 [data-minas-plugin="downloadcenter"] .shell{width: min(100%, 850px); margin: auto; padding: max(16px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); min-width: 0px;}
 [data-minas-plugin="downloadcenter"] .eyebrow.accent{color: var(--accent);}
 [data-minas-plugin="downloadcenter"] .icon-button{width: 40px; height: 40px; padding: 0px; color: rgb(255, 255, 255); background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.2); font-size: 24px;}
-[data-minas-plugin="downloadcenter"] .badge{display: inline-block; border-radius: 20px; padding: 5px 9px; color: var(--accent); background: var(--soft); font-size: 11px; font-weight: 700;}
+[data-minas-plugin="downloadcenter"] .badge{display: inline-block; border-radius: 20px; padding: 5px 9px; color: var(--accent); background: var(--soft); font-size:13px; font-weight: 700;}
 [data-minas-plugin="downloadcenter"] .badge.enabled{color: rgb(8, 118, 92); background: rgb(220, 245, 233);}
 [data-minas-plugin="downloadcenter"] .badge.failed{color: var(--red); background: rgba(191, 54, 70, 0.1);}
 [data-minas-plugin="downloadcenter"] .page{display: none; min-width: 0px;}
@@ -68,9 +68,9 @@
 [data-minas-plugin="downloadcenter"] .task-head .badge{flex: 0 0 auto;}
 [data-minas-plugin="downloadcenter"] .task-card p{margin-top: 9px;}
 [data-minas-plugin="downloadcenter"] .task-meta{display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;}
-[data-minas-plugin="downloadcenter"] .chip{font-size: 11px; padding: 5px 8px; border-radius: 8px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); overflow-wrap: anywhere;}
+[data-minas-plugin="downloadcenter"] .chip{font-size:13px; padding: 5px 8px; border-radius: 8px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); overflow-wrap: anywhere;}
 [data-minas-plugin="downloadcenter"] .empty{padding: 26px 14px; border: 1px dashed var(--line); border-radius: 15px; text-align: center; color: var(--muted); background: var(--surface);}
-[data-minas-plugin="downloadcenter"] .notice{padding: 13px 14px; background: var(--soft); color: var(--accent); border-radius: 14px; line-height: 1.65; font-size: 12px; margin-bottom: 12px;}
+[data-minas-plugin="downloadcenter"] .notice{padding: 13px 14px; background: var(--soft); color: var(--accent); border-radius: 14px; line-height: 1.65; font-size:13px; margin-bottom: 12px;}
 [data-minas-plugin="downloadcenter"] .danger-note{color: var(--red); background: rgba(191, 54, 70, 0.08);}
 [data-minas-plugin="downloadcenter"] .backdrop{position: fixed; inset: 0px; z-index: 30; background: rgba(25, 19, 12, 0.5); touch-action: none;}
 [data-minas-plugin="downloadcenter"] .dialog{position: fixed; top: 50%; left: 50%; z-index: 31; transform: translate(-50%, -50%); width: min(380px, -28px + 100vw); max-height: calc(100dvh - 28px); overflow: auto; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: rgba(0, 0, 0, 0.25) 0px 24px 64px; overscroll-behavior: contain; animation: 0.15s ease-out 0s 1 normal none running downloadcenter-dialog-in;}
@@ -104,7 +104,7 @@
 [data-minas-plugin="downloadcenter"] .picker-options{display: grid; padding: 8px 12px; gap: 4px; max-height: 55vh; overflow: auto; overscroll-behavior: contain;}
 [data-minas-plugin="downloadcenter"] .picker-options button{min-height: 46px; text-align: left; border: 0px; overflow-wrap: anywhere;}
 [data-minas-plugin="downloadcenter"] .picker-options button.selected{color: var(--accent); background: var(--soft);}
-[data-minas-plugin="downloadcenter"] #logText{margin: 0px; padding: 18px; white-space: pre-wrap; word-break: break-word; font: 13px / 1.6 ui-monospace, monospace;}
+[data-minas-plugin="downloadcenter"] #logText{margin: 0px; padding: 18px; white-space: pre-wrap; word-break: break-word; font:15px/1.75 var(--font-code);}
 [data-minas-plugin="downloadcenter"] .toast{position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: calc(100% - 32px); padding: 12px 16px; border-radius: 12px; color: white; background: rgb(80, 56, 33); pointer-events: none;}
 [data-minas-plugin="downloadcenter"] .toast:empty{display: none;}
 [data-minas-plugin="downloadcenter"] .toast.error{background: rgb(151, 49, 64);}
@@ -150,7 +150,7 @@
 [data-minas-plugin="downloadcenter"] .dialog.layer-top{z-index: 34;}
 [data-minas-plugin="downloadcenter"] #folderDialog{z-index: 33;}
 [data-minas-plugin="downloadcenter"] #confirmDialog{z-index: 35;}
-[data-minas-plugin="downloadcenter"] .dialog pre{white-space: pre-wrap; overflow-wrap: anywhere; font: 13px / 1.6 ui-monospace, monospace;}
+[data-minas-plugin="downloadcenter"] .dialog pre{white-space: pre-wrap; overflow-wrap: anywhere; font:15px/1.75 var(--font-code);}
 [data-minas-plugin="downloadcenter"] .toast{background: rgb(36, 48, 68);}
 @media (prefers-color-scheme: dark){
 [data-minas-plugin="downloadcenter"] .progress > i{background: rgb(99, 159, 255);}
@@ -239,12 +239,12 @@
 [data-minas-plugin="downloadcenter"] .bt-file-browser{display: block; width: 100%; max-width: 100%; max-height: none; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0px;}
 [data-minas-plugin="downloadcenter"] .bt-file-tools{display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap;}
 [data-minas-plugin="downloadcenter"] .bt-file-tools .bt-select-all{display: flex; align-items: center; gap: 7px; margin: 0px; color: var(--text); font-size: 13px; white-space: nowrap;}
-[data-minas-plugin="downloadcenter"] .bt-selection-summary{flex: 1 1 0%; min-width: 110px; color: var(--muted); font-size: 12px; line-height: 1.5;}
-[data-minas-plugin="downloadcenter"] .bt-file-tools .bt-invert{min-height: 30px; padding: 5px 9px; border: 0px; background: var(--soft); color: var(--accent); font-size: 12px;}
+[data-minas-plugin="downloadcenter"] .bt-selection-summary{flex: 1 1 0%; min-width: 110px; color: var(--muted); font-size:13px; line-height: 1.5;}
+[data-minas-plugin="downloadcenter"] .bt-file-tools .bt-invert{min-height: 30px; padding: 5px 9px; border: 0px; background: var(--soft); color: var(--accent); font-size:13px;}
 [data-minas-plugin="downloadcenter"] .bt-file-scroll{max-height: min(300px, 40dvh); overflow: auto; overscroll-behavior: contain; border-radius: 0px 0px 14px 14px;}
 [data-minas-plugin="downloadcenter"] .bt-file-columns, [data-minas-plugin="downloadcenter"] .bt-file-row{display: grid; grid-template-columns: minmax(0px, 1fr) 80px; align-items: center; gap: 10px; padding: 9px 12px; min-width: 0px;}
 [data-minas-plugin="downloadcenter"] .bt-file-columns.with-progress, [data-minas-plugin="downloadcenter"] .bt-file-row.with-progress{grid-template-columns: minmax(0px, 1fr) 74px 54px;}
-[data-minas-plugin="downloadcenter"] .bt-file-columns{position: sticky; top: 0px; z-index: 1; background: var(--bg); color: var(--muted); font-size: 12px;}
+[data-minas-plugin="downloadcenter"] .bt-file-columns{position: sticky; top: 0px; z-index: 1; background: var(--bg); color: var(--muted); font-size:13px;}
 [data-minas-plugin="downloadcenter"] .bt-file-columns > span:not(:first-child){text-align: right;}
 [data-minas-plugin="downloadcenter"] .form-body .bt-file-row{font-size: 13px; font-weight: 400; color: var(--text); border-bottom: 1px solid var(--line); cursor: pointer; margin: 0px; min-height: 43px;}
 [data-minas-plugin="downloadcenter"] .bt-file-row:last-child{border-bottom: 0px;}
@@ -254,8 +254,8 @@
 [data-minas-plugin="downloadcenter"] .minas-plugin-body .form-body .bt-file-name{display: block; flex: 1 1 0%; width: 0px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0px; font-size: 13px; color: var(--text);}
 [data-minas-plugin="downloadcenter"] .bt-file-icon{display: grid; place-items: center; flex: 0 0 21px; height: 23px; border-radius: 5px; background: var(--soft); color: var(--accent); font-size: 13px;}
 [data-minas-plugin="downloadcenter"] .bt-file-icon.video{background: rgb(57, 120, 213); color: white;}
-[data-minas-plugin="downloadcenter"] .minas-plugin-body .form-body .bt-file-size, [data-minas-plugin="downloadcenter"] .minas-plugin-body .form-body .bt-file-progress{min-width: 0px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: right; color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums;}
-[data-minas-plugin="downloadcenter"] .bt-file-group{display: flex; align-items: center; gap: 9px; padding: 10px 12px; background: var(--bg); font-size: 12px; color: var(--text); min-width: 0px;}
+[data-minas-plugin="downloadcenter"] .minas-plugin-body .form-body .bt-file-size, [data-minas-plugin="downloadcenter"] .minas-plugin-body .form-body .bt-file-progress{min-width: 0px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: right; color: var(--muted); font-size:13px; white-space: nowrap; font-variant-numeric: tabular-nums;}
+[data-minas-plugin="downloadcenter"] .bt-file-group{display: flex; align-items: center; gap: 9px; padding: 10px 12px; background: var(--bg); font-size:13px; color: var(--text); min-width: 0px;}
 [data-minas-plugin="downloadcenter"] .bt-file-group > span:nth-child(2){flex: 1 1 0%; min-width: 0px; overflow-wrap: anywhere; word-break: break-word;}
 [data-minas-plugin="downloadcenter"] .bt-file-group small{color: var(--muted); white-space: nowrap;}
 @media (max-width: 420px){
@@ -282,7 +282,7 @@
 [data-minas-plugin="downloadcenter"] .core-controls .delete-option{margin:0;align-items:flex-start;gap:10px;}
 [data-minas-plugin="downloadcenter"] .core-controls .delete-option input{flex:none;margin-top:4px;}
 [data-minas-plugin="downloadcenter"] .core-controls .delete-option span{min-width:0;overflow-wrap:anywhere;}
-[data-minas-plugin="downloadcenter"] .core-controls small{display:block;color:var(--muted);font-size:12px;}
+[data-minas-plugin="downloadcenter"] .core-controls small{display:block;color:var(--muted);font-size:13px;}
 [data-minas-plugin="downloadcenter"] .core-controls .actions{margin:0;flex-wrap:wrap;}
 [data-minas-plugin="downloadcenter"] .core-grid .core-status{margin:0;min-height:4.6em;box-sizing:border-box;padding:10px 12px;border-radius:10px;background:var(--bg);color:var(--muted);font-size:13px;line-height:1.7;overflow-wrap:anywhere;}
 [data-minas-plugin="downloadcenter"] .core-grid .core-status[data-state="error"]{color:var(--danger);background:var(--danger-soft);}

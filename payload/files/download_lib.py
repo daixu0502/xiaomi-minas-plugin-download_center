@@ -18,7 +18,7 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 
-VERSION = "1.1.6"
+VERSION = "1.1.7"
 MAX_TORRENT = 4 * 1024 * 1024
 DEFAULTS = {"directory": "", "concurrent": 3, "connections": 4, "downloadKiB": 0,
             "uploadKiB": 1024, "seedRatio": 1.0, "seedMinutes": 60,
@@ -263,6 +263,36 @@ class Manager:
         conn.execute("CREATE TABLE IF NOT EXISTS task_files (task TEXT, path TEXT, dev INTEGER, ino INTEGER, PRIMARY KEY(task,path))")
         return conn
 
+    def runtime_value(self, key, loader, ttl=300):
+        """Static engine metadata; identity changes invalidate it after a restart."""
+        identity = []
+        for name in ('service.pid', 'rpc.port', 'qb.port'):
+            try: identity.append((self.var / name).read_text().strip())
+            except OSError: identity.append('')
+        path = self.var / ('runtime-' + key + '.json')
+        try:
+            saved = json.loads(path.read_text())
+            value = saved.get('value') if isinstance(saved,dict) else None
+            valid = isinstance(value,str) if key=='aria-version' else (isinstance(value,list) and len(value)==2 and isinstance(value[0],str) and isinstance(value[1],dict)) if key=='qb-build' else True
+            if isinstance(saved,dict) and valid and saved.get('identity') == identity and 0 <= time.time() - saved['time'] < ttl:
+                return saved['value']
+        except (OSError, ValueError, KeyError, TypeError): pass
+        value = loader()
+        atomic_json(path, {'identity': identity, 'time': time.time(), 'value': value})
+        return value
+
+    def sync_rows(self, ident=None, remote=None):
+        rows = [self.row(ident)] if ident else self.rows()
+        if remote is not None:
+            # Foreground actions after sampling win over an old engine snapshot.
+            rows = [r for r in rows if remote['known'].get(r['id']) == (r['gid'], r['snapshot'])]
+        return rows
+
+    def fetch_sync(self, rows):
+        """Read engines without api.lock; apply these samples under api.lock."""
+        return {'known': {r['id']: (r['gid'], r['snapshot']) for r in rows},
+                'aria': self.rpc('tellActive') + self.rpc('tellWaiting', 0, 1000) + self.rpc('tellStopped', 0, 1000)}
+
     def settings(self):
         data = dict(DEFAULTS)
         try:
@@ -491,13 +521,11 @@ class Manager:
         self.rpc("addTorrent", source["torrent"], [], options)
         return self.rpc("tellStatus", options["gid"]), old
 
-    def sync(self, ident=None):
-        rows = [r for r in self.rows() if json.loads(r['snapshot']).get('engine') != 'qbittorrent'] if ident is None else [self.row(ident)]
+    def sync(self, ident=None, remote=None):
+        rows = [r for r in self.sync_rows(ident, remote) if json.loads(r['snapshot']).get('engine') != 'qbittorrent']
         if ident is None:
-            active = self.rpc("tellActive")
-            waiting = self.rpc("tellWaiting", 0, 1000)
-            stopped = self.rpc("tellStopped", 0, 1000)
-            remote = {s["gid"]: s for s in active + waiting + stopped}
+            samples = remote['aria'] if remote is not None else self.fetch_sync(rows)['aria']
+            remote = {s['gid']: s for s in samples}
         else:
             try:
                 item = self.rpc("tellStatus", rows[0]["gid"])
@@ -559,13 +587,13 @@ class Manager:
                     snap.update(status="error", errorMessage="核心中未找到任务，可能上次异常断电；可重试恢复", downloadSpeed="0", uploadSpeed="0")
                     db.execute("UPDATE tasks SET snapshot=? WHERE id=?", (json.dumps(snap), row["id"]))
 
-    def snapshot(self):
+    def snapshot(self, include_settings=True):
         running, error, stats, version = False, "", {}, ""
         try:
             # Supervisor owns full synchronization. UI reads must not rescan
             # every torrent/file while holding the same lock as task actions.
             stats = self.rpc("getGlobalStat")
-            version = self.rpc("getVersion")["version"]
+            version = self.runtime_value('aria-version', lambda:self.rpc('getVersion')['version'])
             running = True
         except DownloadError as exc:
             error = str(exc)
@@ -583,11 +611,13 @@ class Manager:
             job = json.loads((self.var / "job.json").read_text())
         except (OSError, ValueError):
             job = {}
-        return {"running": running, "error": error, "stats": stats, "tasks": tasks, "version": VERSION,
-                "engineVersion": version, "settings": self.settings(), "bt": self.bt_state(), "trackerStatus": tracker_status,
+        result = {"running": running, "error": error, "stats": stats, "tasks": tasks, "version": VERSION,
+                "engineVersion": version, "bt": self.bt_state(), "trackerStatus": tracker_status,
                 "coreUpdate": self.core_state(),
                 "free": shutil.disk_usage(self.root).free, "enabled": (self.var / "enabled").exists(),
                 "job": {k: job.get(k) for k in ("state", "count", "failed", "total", "id", "command")}}
+        if include_settings: result['settings'] = self.settings()
+        return result
 
     def core_state(self):
         from core_update import state
@@ -1086,14 +1116,17 @@ class Manager:
                 atomic_json(self.var / "job.json", job)
 
     def dispatch(self, action, data):
+        if action == 'status':
+            self.ready()
+            # SQLite reads and atomic settings snapshots do not need the mutation
+            # lock. A disconnected engine must not block pause/delete requests.
+            return self.snapshot(include_settings=data.get('includeSettings') is not False)
         with self.locked():
             if (self.core_state().get('state') == 'installing' or getattr(self, 'qb_update_state', lambda: {})().get('state') == 'installing') and action not in ('status', 'browse', 'torrent_browse', 'torrent_preview', 'torrent_nas_preview', 'detail'):
                 raise DownloadError('正在切换下载核心，请稍后再操作')
             if action in ('core_check', 'core_apply'):
                 from core_update import queue
                 return queue(self, 'check' if action == 'core_check' else 'apply', data.get('proxy') is True)
-            if action == "status":
-                return self.snapshot()
             if action == "browse":
                 return self.browse(data.get("path", ""))
             if action == "torrent_browse":

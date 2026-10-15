@@ -43,7 +43,10 @@ class DualManager(Manager):
         snap = json.loads(row['snapshot'])
         expected = snap.get('infoHash', row['gid'])
         items = self.qb.torrents() if items is None else items
-        matches = [item for item in items if row['gid'] == item.get('hash') or expected == item.get('infohash_v1')]
+        if isinstance(items, dict):
+            matches = list({index:item for index,item in items['hash'].get(row['gid'], []) + items['v1'].get(expected, [])}.values())
+        else:
+            matches = [item for item in items if row['gid'] == item.get('hash') or expected == item.get('infohash_v1')]
         if len(matches) != 1: return row, None
         item = matches[0]
         canonical = item['hash']
@@ -83,13 +86,12 @@ class DualManager(Manager):
         atomic_json(self.settings_path, s)
         return self.bt_state()
 
-    def snapshot(self):
-        result = super().snapshot()
+    def snapshot(self, include_settings=True):
+        result = super().snapshot(include_settings)
         result['engines'] = {'aria2': {'running': result['running'], 'version': result['engineVersion']}}
         try:
             stats = self.qb.request('transfer/info')
-            version = self.qb.request('app/version').strip().lstrip('v')
-            build = self.qb.request('app/buildInfo')
+            version, build = self.runtime_value('qb-build', lambda:[self.qb.request('app/version').strip().lstrip('v'), self.qb.request('app/buildInfo')])
             result['engines']['qbittorrent'] = {'running': True, 'version': version, 'libtorrent': build.get('libtorrent', '')}
             result['bt'].update(connection=stats.get('connection_status'), dhtNodes=stats.get('dht_nodes', 0))
             # Show this plugin's traffic; external Openlist jobs stay separate.
@@ -204,8 +206,8 @@ class DualManager(Manager):
             if ids: self.qb.request('torrents/filePrio', {'hash': row['gid'], 'id': '|'.join(ids), 'priority': priority})
 
     def prepare_task(self, row, item, snap):
-        source = json.loads(self.row(row['id'])['source'])
         if not snap.get('initializing'): return snap
+        source = json.loads(self.row(row['id'])['source'])
         files = self.qb.files(row['gid'])
         if not files: return snap
         if not item['state'].startswith(('stopped', 'paused')) and item['state'] != 'moving':
@@ -243,20 +245,30 @@ class DualManager(Manager):
         self.save_row(row, snap)
         return snap
 
-    def sync(self, ident=None):
+    def fetch_sync(self, rows):
+        result = super().fetch_sync(rows)
+        result['qb'] = self.qb.torrents() if any(self.is_qb(r) for r in rows) else []
+        return result
+
+    def sync(self, ident=None, remote=None):
         if ident is not None and not self.is_qb(self.row(ident)):
             return super().sync(ident)
-        if ident is None: super().sync()
-        rows = [self.row(ident)] if ident else [r for r in self.rows() if self.is_qb(r)]
+        if ident is None: super().sync(remote=remote)
+        rows = [r for r in self.sync_rows(ident, remote) if self.is_qb(r)]
         if not rows: return
-        items = self.qb.torrents()
+        items = remote['qb'] if remote is not None else self.qb.torrents()
+        lookup = {'hash':{}, 'v1':{}}
+        for index, item in enumerate(items):
+            for kind, field in (('hash','hash'), ('v1','infohash_v1')):
+                lookup[kind].setdefault(item.get(field), []).append((index,item))
+        updates = []
         for row in rows:
-            row, item = self.resolve_qb_row(row, items)
+            row, item = self.resolve_qb_row(row, lookup)
             snap = json.loads(row['snapshot'])
             if item is None:
                 if snap['status'] in LIVE and time.time() - snap.get('addedAt', 0) > 30:
                     snap.update(status='error', errorMessage='qBittorrent 中未找到任务，可重试恢复', downloadSpeed='0', uploadSpeed='0')
-                    self.save_row(row, snap)
+                    if snap != json.loads(row['snapshot']): updates.append((json.dumps(snap), row['id']))
                 continue
             try:
                 snap = self.prepare_task(row, item, snap)
@@ -278,7 +290,10 @@ class DualManager(Manager):
                         connections=str(item.get('num_seeds', 0) + item.get('num_leechs', 0)), numSeeders=str(item.get('num_seeds', 0)))
             if not snap.get('metadataPending'): snap['name'] = item['name']
             if status == 'error' and not snap.get('errorMessage'): snap['errorMessage'] = 'qBittorrent 状态：' + state
-            if snap != json.loads(row['snapshot']): self.save_row(row, snap)
+            if snap != json.loads(row['snapshot']): updates.append((json.dumps(snap), row['id']))
+        if updates:
+            with self.db() as db:
+                db.executemany('UPDATE tasks SET snapshot=? WHERE id=?', updates)
 
     def operate(self, ident, command, delete_files=False):
         row = self.row(ident)

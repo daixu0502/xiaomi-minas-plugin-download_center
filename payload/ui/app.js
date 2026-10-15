@@ -82,9 +82,16 @@ var document = window.XiaomiPluginClient.document;
     if (!snapshot) return;
     const query = $('search').value.trim().toLowerCase();
     for (const [id, history] of [['taskList', false], ['historyList', true]]) {
-      const list = $(id); list.replaceChildren();
-      snapshot.tasks.filter(t => history !== live.includes(t.status)).filter(t => history || ((!query || t.name.toLowerCase().includes(query)) && (filter === 'all' || t.status === filter))).forEach(t => {
+      const list = $(id), visible = snapshot.tasks.filter(t => history !== live.includes(t.status)).filter(t => history || ((!query || t.name.toLowerCase().includes(query)) && (filter === 'all' || t.status === filter)));
+      const existing = new Map(Array.from(list.children).map(card=>[card.dataset.taskId,card]));
+      const keep = new Set(visible.map(t => t.id));
+      Array.from(list.children).forEach(card => {if (!keep.has(card.dataset.taskId)) card.remove();});
+      visible.forEach((t, index) => {
+        const structure = JSON.stringify([t.name, t.status, t.directory, t.errorMessage, t.isBT, Number(t.totalLength)>0 && Number(t.completedLength)>=Number(t.totalLength)]);
+        const old = existing.get(t.id);
+        if (old && old.dataset.structure === structure) { updateTaskCard(old,t); if(list.children[index]!==old)list.insertBefore(old,list.children[index]||null); return; }
         const card = text('article', '', 'task-card'), head = text('div', '', 'task-head'); head.append(text('h3', t.name));
+        card.dataset.taskId=t.id;card.dataset.structure=structure;
         const isSeed = t.isBT && t.status === 'active' && Number(t.totalLength) > 0 && Number(t.completedLength) >= Number(t.totalLength);
         head.append(text('span', isSeed ? '做种中' : (labels[t.status] || t.status), 'badge' + (t.status === 'error' ? ' failed' : ''))); card.append(head);
         const progress = text('div', '', 'progress'), bar = document.createElement('i'), ratio = Number(t.totalLength) ? Math.min(100, Number(t.completedLength) / Number(t.totalLength) * 100) : 0;
@@ -99,19 +106,30 @@ var document = window.XiaomiPluginClient.document;
         if (t.status === 'waiting') actions.append(taskButton('移到队首', () => operation(t, 'top')));
         if (['error', 'removed'].includes(t.status)) actions.append(taskButton('重试', () => operation(t, 'retry')));
         actions.append(taskButton('详情 / 文件', () => openDetail(t.id)), taskButton('删除', () => operation(t, 'remove'), 'danger'));
-        card.append(actions); list.append(card);
+        card.append(actions); if(old)old.replaceWith(card);if(list.children[index]!==card)list.insertBefore(card,list.children[index]||null);
       });
       if (!list.children.length) list.append(text('div', history ? '暂无历史记录' : '暂无下载任务，点击“新建下载”开始', 'empty'));
     }
   }
+  function updateTaskCard(card,t){
+    const ratio=Number(t.totalLength)?Math.min(100,Number(t.completedLength)/Number(t.totalLength)*100):0;
+    card.querySelector('.progress i').style.width=ratio+'%';
+    const stats=card.querySelector('.task-stats');
+    while(stats.children.length<4)stats.append(text('span',''));
+    const values=[bytes(t.completedLength)+' / '+bytes(t.totalLength)+' · '+ratio.toFixed(1)+'%','↓ '+bytes(t.downloadSpeed)+'/s','↑ '+bytes(t.uploadSpeed)+'/s'];
+    values.forEach((value,i)=>{if(stats.children[i].textContent!==value)stats.children[i].textContent=value;});
+    const eta=Number(t.downloadSpeed)>0&&Number(t.completedLength)<Number(t.totalLength);
+    stats.children[3].hidden=!eta;if(eta)stats.children[3].textContent='约 '+Math.ceil((Number(t.totalLength)-Number(t.completedLength))/Number(t.downloadSpeed)/60)+' 分钟';
+  }
   async function refresh(fresh = false) {
     if (fresh && refreshing) await refreshing;
-    if (!refreshing) refreshing = loadSnapshot().finally(() => { refreshing = null; });
+    if (!refreshing) refreshing = loadSnapshot(fresh).finally(() => { refreshing = null; });
     return refreshing;
   }
-  async function loadSnapshot() {
+  async function loadSnapshot(fresh = false) {
     try {
-      snapshot = await api('status'); const s = snapshot;
+      const packet = await api('status',{includeSettings:!snapshot||fresh||page==='settings'||page==='trackers'});
+      snapshot = {...packet,settings:packet.settings||snapshot?.settings}; const s = snapshot;
       $('health').textContent = s.running ? '服务运行中' : '服务未运行'; $('health').className = 'badge ' + (s.running ? 'enabled' : 'failed');
       $('qbEngineVersion').textContent = 'qBittorrent ' + (s.engines?.qbittorrent?.version || '未连接') + ' · BT／磁链';
       $('ariaEngineVersion').textContent = 'aria2 ' + (s.engineVersion || '未连接') + ' · 直链';

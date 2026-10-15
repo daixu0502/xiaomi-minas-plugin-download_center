@@ -224,15 +224,22 @@ def serve(m):
         while not stopping[0] and child.poll() is None and qb_child.poll() is None:
             m.ready()  # Pool lost: stop instead of writing into an empty mountpoint.
             with m.locked():
-                m.sync()
-                if time.time() - last_save > 15:
-                    m.save_session(); last_save = time.time()
+                sampled_rows = m.rows()
+                sampled_revision = (m.var / 'tasks.sqlite').stat().st_mtime_ns
+            remote = m.fetch_sync(sampled_rows)
+            with m.locked():
+                # Any mutation (including selection/source-only changes) supersedes
+                # this sample. No task can be resurrected or overwritten by it.
+                if (m.var / 'tasks.sqlite').stat().st_mtime_ns == sampled_revision:
+                    m.sync(remote=remote)
                 try:
                     status = json.loads((m.var / "tracker-status.json").read_text())
                 except (OSError, ValueError):
                     status = {}
                 s = m.settings()
                 update = status.get("state") == "pending" or (s["autoTrackers"] and s["sources"] and time.time() - max(status.get("time", 0), last_auto) > 86400)
+            if time.time() - last_save > 15:
+                m.save_session(); last_save = time.time()
             if update and not (tracker_worker and tracker_worker.is_alive()):
                 tracker_worker = threading.Thread(target=update_trackers, args=(manager(m.home),), daemon=True)
                 tracker_worker.start(); last_auto = time.time()

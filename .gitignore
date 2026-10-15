@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 payload/files/aria2c
 payload/files/qbittorrent-nox
+/dist/
+/offline/
+*.py[cod]

@@ -217,3 +217,7 @@ QB_TEST_BINARY=/path/to/qbittorrent-nox python3 -B -m unittest discover -s tests
 
 
 
+
+## 获取源码
+
+在 GitHub 仓库页面选择 **Code → Download ZIP**，解压后保留项目目录结构，按本页说明运行 `manage.sh`。也可从 **Tags** 页面选择指定版本源码。

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='downloadcenter'
 PLUGIN_LABEL='下载中心'
-PLUGIN_VERSION='1.1.8'
+PLUGIN_VERSION='1.1.9'
 UNINSTALL_NOTE='停止所选用户下载服务；配置、种子和任务记录先备份。已下载及未完成文件均保留，不影响其他用户。'
 
 # Common installation flow adapted from the existing standalone plugins.
@@ -390,6 +390,9 @@ nas_uninstall() {
     done
     nas_remove_entry
     rm -f "/etc/cron.d/downloadcenter-$NAS_USER"
+    if [ -f /data/.minas-privileged/component_admin.py ]; then
+        python3 /data/.minas-privileged/component_admin.py remove --plugin "$NAS_PLUGIN" --user "$NAS_USER" || nas_fail "公共组件登记移除失败"
+    fi
     rm -f "$NAS_WEB_ROOT/$NAS_USER/$NAS_PLUGIN"
     # Paths were checked in full by nas_check_user; repeat immediately before removal.
     nas_pool_path "$NAS_SRC" pluginsrc; nas_pool_path "$NAS_TMP" plugintmp
@@ -481,7 +484,8 @@ allocate "$VAR/peer.port" 19400 19499
 allocate "$VAR/qb.port" 19500 19599
 allocate "$VAR/aria-peer.port" 19600 19699
 allocate "$VAR/openlist.port" 19700 19799
-stage="$SRC_PARENT/.downloadcenter.new.$$"
+python3 "$PAYLOAD/common/component_admin.py" install --plugin "$PLUGIN_NAME" --user "$USER_NAME" --payload "$PAYLOAD" --plugin-version "$PLUGIN_VERSION" || nas_fail "公共权限组件安装失败"
+stage="$SRC_PARENT/.downloadcenter.new.$"
 [ ! -e "$stage" ] || nas_fail "安装暂存路径已存在。"
 mkdir "$stage"
 cp -R "$PAYLOAD/files" "$stage/files"; cp -R "$PAYLOAD/ui" "$stage/ui"

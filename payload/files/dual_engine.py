@@ -63,7 +63,7 @@ class DualManager(Manager):
 
     def bt_state(self):
         try:
-            active = json.loads((self.var / 'qb-applied.json').read_text())
+            active = json.loads((self.runtime / 'qb-applied.json').read_text())
         except (OSError, ValueError):
             active = {}
         s = self.settings()
@@ -108,7 +108,7 @@ class DualManager(Manager):
         from service import live
         result['lanInterfaces'] = lan_status(self)
         result['credentialsEditable'] = not bool(live(self))
-        try: result['trackerApply'] = json.loads((self.var / 'tracker-apply.json').read_text())
+        try: result['trackerApply'] = json.loads((self.runtime / 'tracker-apply.json').read_text())
         except (OSError, ValueError): result['trackerApply'] = {}
         return result
 
@@ -426,7 +426,7 @@ class DualManager(Manager):
                 except DownloadError:
                     result['qbFailed'] += 1
                     result['failed'].append(json.loads(row['snapshot'])['name'])
-        atomic_json(self.var / 'tracker-apply.json', dict(result, time=time.time()))
+        atomic_json(self.runtime / 'tracker-apply.json', dict(result, time=time.time()))
         return result
 
     def verify_trackers(self):

@@ -26,7 +26,7 @@ BUSY = ('pending', 'checking', 'downloading', 'installing')
 
 def state(m):
     try:
-        result = json.loads((m.var / 'core-update.json').read_text())
+        result = json.loads((m.runtime / 'core-update.json').read_text())
         if result.get('state') in BUSY and time.time() - result.get('time', 0) > 30:
             try:
                 cmd = Path('/proc/%d/cmdline' % int(result.get('workerPid', 0))).read_bytes()
@@ -43,7 +43,7 @@ def state(m):
 def write_state(m, **values):
     values['time'] = time.time()
     values['workerPid'] = os.getpid()
-    atomic_json(m.var / 'core-update.json', values)
+    atomic_json(m.runtime / 'core-update.json', values)
 
 
 def version_tuple(value):
@@ -129,7 +129,7 @@ def install_candidate(m, candidate, version):
         shutil.copy2(candidate, pending)
         shutil.copy2(core_path(m), previous)
         old_version = binary_version(previous)
-        with (m.var/'lifecycle.lock').open('a') as lock:
+        with (m.runtime/'lifecycle.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             enabled = (m.var/'enabled').exists()
             running = bool(live(m))
@@ -169,7 +169,7 @@ def queue(m, command, proxy=False):
         raise DownloadError('已有核心检查或更新正在执行，请稍后查看结果')
     write_state(m, state='pending', command=command, message='正在准备' + ('检查更新…' if command == 'check' else '下载更新…'))
     try:
-        with (m.var/'core-update.log').open('a') as log:
+        with (m.runtime/'core-update.log').open('a') as log:
             subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()), command, str(m.home), 'proxy' if proxy else 'direct'],
                              stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
     except OSError as exc:
@@ -183,7 +183,7 @@ def run(m, command, proxy):
     if command not in ('check', 'apply'): raise DownloadError('无效核心更新操作')
     if os.geteuid() == 0: raise DownloadError('核心更新禁止以 root 运行')
     m.ready()
-    with (m.var/'core-update.lock').open('a') as lock:
+    with (m.runtime/'core-update.lock').open('a') as lock:
         try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError: return
         common = {'command': command, 'proxy': proxy}
@@ -196,7 +196,7 @@ def run(m, command, proxy):
             if command == 'check' or not available:
                 write_state(m, **common, state='done', message='发现新版本，可下载并更新。' if available else '当前已是此渠道的最新版本。')
                 return
-            with tempfile.TemporaryDirectory(prefix='core-download-', dir=m.var) as folder:
+            with tempfile.TemporaryDirectory(prefix='core-download-', dir=m.runtime) as folder:
                 write_state(m, **common, state='downloading', message='正在下载并校验 SHA-256…')
                 candidate = Path(folder)/'aria2c'
                 unpack(fetch(info['url'], proxy, 40 * 1024 * 1024), info, candidate)

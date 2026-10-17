@@ -27,7 +27,7 @@ def core_path(m):
 
 def state(m):
     try:
-        result = json.loads((m.var / 'qb-update.json').read_text())
+        result = json.loads((m.runtime / 'qb-update.json').read_text())
         if result.get('state') in BUSY and time.time() - result.get('time', 0) > 30:
             try:
                 cmd = Path('/proc/%d/cmdline' % int(result.get('workerPid', 0))).read_bytes()
@@ -39,7 +39,7 @@ def state(m):
 
 
 def write_state(m, **values):
-    atomic_json(m.var / 'qb-update.json', dict(values, time=time.time(), workerPid=os.getpid()))
+    atomic_json(m.runtime / 'qb-update.json', dict(values, time=time.time(), workerPid=os.getpid()))
 
 
 def parts(version):
@@ -48,12 +48,12 @@ def parts(version):
     return tuple(map(int, version.split('.')[:3]))
 
 
-def binary_version(path):
+def binary_version(path, runtime=None):
     # The NAS CGI launcher can retain HOME=/root after dropping privileges.
     # Qt initializes standard directories even for --version. Never reuse the
     # running core's profile or trust inherited HOME/XDG paths for this probe.
     try:
-        with tempfile.TemporaryDirectory(prefix='qb-version-') as folder:
+        with tempfile.TemporaryDirectory(prefix='qb-version-', dir=runtime) as folder:
             env = dict(os.environ, HOME=folder,
                        XDG_CONFIG_HOME=folder + '/config', XDG_CACHE_HOME=folder + '/cache',
                        XDG_DATA_HOME=folder + '/data', XDG_STATE_HOME=folder + '/state',
@@ -73,7 +73,7 @@ def binary_version(path):
 
 
 def current(m):
-    result = {'current': binary_version(core_path(m)), 'currentLibtorrent': ''}
+    result = {'current': binary_version(core_path(m), m.runtime), 'currentLibtorrent': ''}
     try: result['currentLibtorrent'] = m.qb.request('app/buildInfo')['libtorrent']
     except (DownloadError, KeyError):
         try:
@@ -117,7 +117,7 @@ def unpack(data, info, target):
     if len(data) < 64 or data[:6] != b'\x7fELF\x02\x01' or int.from_bytes(data[18:20], 'little') != machine: raise DownloadError('核心架构不匹配')
     with target.open('xb') as stream: stream.write(data)
     target.chmod(0o755)
-    if binary_version(target) != info['latest']: raise DownloadError('核心版本与发布信息不一致')
+    if binary_version(target, target.parent) != info['latest']: raise DownloadError('核心版本与发布信息不一致')
 
 
 def wait_running(m, expected):
@@ -141,8 +141,8 @@ def install_candidate(m, candidate, version):
         stage = Path(folder)
         pending, previous, profile = stage / 'new', stage / 'old', m.var / 'qb-profile'
         shutil.copy2(candidate, pending); shutil.copy2(core_path(m), previous)
-        old_version = binary_version(previous)
-        with (m.var / 'lifecycle.lock').open('a') as lock:
+        old_version = binary_version(previous, m.runtime)
+        with (m.runtime / 'lifecycle.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             enabled, running = (m.var / 'enabled').exists(), bool(live(m))
             stopped, switched, saved_profile = False, False, False
@@ -188,7 +188,7 @@ def queue(m, command, proxy=False):
     if any(s.get('state') in BUSY for s in (state(m), aria_state(m))): raise DownloadError('已有核心检查或更新在执行，请稍后再试')
     write_state(m, state='pending', command=command, message='正在准备' + ('检查更新…' if command == 'check' else '下载更新…'))
     try:
-        with (m.var / 'qb-update.log').open('a') as log:
+        with (m.runtime / 'qb-update.log').open('a') as log:
             subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()), command, str(m.home), 'proxy' if proxy else 'direct'],
                              stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
     except OSError as exc:
@@ -200,7 +200,7 @@ def run(m, command, proxy):
     from service import tracker_error
     if os.geteuid() == 0 or command not in ('check', 'apply'): raise DownloadError('更新必须由插件所属用户执行')
     m.ready()
-    with (m.var / 'core-update.lock').open('a') as lock:
+    with (m.runtime / 'core-update.lock').open('a') as lock:
         try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             write_state(m, state='error', message='另一个核心正在更新，请稍后重试'); return
@@ -212,7 +212,7 @@ def run(m, command, proxy):
             common.update(installed, latest=info['latest'], libtorrent=info['libtorrent'], updateAvailable=available)
             if command == 'check' or not available:
                 write_state(m, **common, state='done', message='发现新版本，可下载并更新。' if available else '当前已是此渠道的最新版本。'); return
-            with tempfile.TemporaryDirectory(prefix='qb-download-', dir=m.var) as folder:
+            with tempfile.TemporaryDirectory(prefix='qb-download-', dir=m.runtime) as folder:
                 write_state(m, **common, state='downloading', message='正在下载并校验 SHA-256…')
                 candidate = Path(folder) / 'qbittorrent-nox'
                 unpack(fetch(info['url'], proxy, 100 * 1024 * 1024), info, candidate)

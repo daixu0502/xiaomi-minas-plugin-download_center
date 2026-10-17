@@ -29,7 +29,7 @@ def manager(home):
 
 def live(m):
     try:
-        pid = int((m.var / "service.pid").read_text())
+        pid = int((m.runtime / "service.pid").read_text())
         cmd = Path("/proc/%d/cmdline" % pid).read_bytes().split(b"\0")
         return pid if b"serve" in cmd and str(m.home).encode() in cmd and any(x.endswith(b"/service.py") for x in cmd) else 0
     except (OSError, ValueError):
@@ -60,7 +60,7 @@ def tracker_error(exc):
 
 def update_trackers(m):
     # Prevent duplicate workers without blocking normal API calls.
-    with (m.var / "tracker-update.lock").open("a") as lock:
+    with (m.runtime / "tracker-update.lock").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -71,7 +71,7 @@ def update_trackers(m):
 def _update_trackers(m):
     with m.locked():
         original = m.settings()
-        atomic_json(m.var / "tracker-status.json", {"state": "updating", "time": time.time(), "message": "正在分别更新订阅"})
+        atomic_json(m.runtime / "tracker-status.json", {"state": "updating", "time": time.time(), "message": "正在分别更新订阅"})
     cache, legacy = tracker_cache(original)
     results, successes = [], 0
     for i, url in enumerate(original["sources"], 1):
@@ -123,7 +123,7 @@ def _update_trackers(m):
                 state = "partial" if successes else "error"
             result = {"state": state, "message": message, "sources": results}
         result["time"] = time.time()
-        atomic_json(m.var / "tracker-status.json", result)
+        atomic_json(m.runtime / "tracker-status.json", result)
 
 
 def session_without_force_save(data, completed_gids=()):
@@ -163,7 +163,7 @@ def normalize_aria_session(session, completed_gids=()):
 
 def serve(m):
     m.ready()
-    lock = (m.var / "supervisor.lock").open("a")
+    lock = (m.runtime / "supervisor.lock").open("a")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -171,7 +171,7 @@ def serve(m):
     # Refuse root even if launched outside the lifecycle script.
     if os.geteuid() == 0:
         raise DownloadError("下载核心禁止以 root 运行")
-    (m.var / "service.pid").write_text(str(os.getpid()))
+    (m.runtime / "service.pid").write_text(str(os.getpid()))
     stopping = [False]
     signal.signal(signal.SIGTERM, lambda *_: stopping.__setitem__(0, True))
     signal.signal(signal.SIGINT, lambda *_: stopping.__setitem__(0, True))
@@ -187,24 +187,26 @@ def serve(m):
             "save-not-found": "true", "force-save": "false", "continue": "true", "auto-file-renaming": "true",
             "allow-overwrite": "false", "file-allocation": "none", "check-certificate": "true", "max-tries": "5", "retry-wait": "5",
             "connect-timeout": "15", "timeout": "60", "max-download-result": "1000", "follow-torrent": "false", "follow-metalink": "false",
-            "bt-save-metadata": "false", "dht-file-path6": str(m.var / "dht6.dat"),
-            "dht-file-path": str(m.var / "dht.dat"), "disk-cache": "16M", "console-log-level": "warn", "summary-interval": "0",
-            "log-level": "warn", "log": str(m.var / "aria2.log"), **m.options(settings), **m.bt_network_options(settings)}
-    path = m.var / "aria2.conf"
+            "bt-save-metadata": "false", "dht-file-path6": str(m.runtime / "dht6.dat"),
+            "dht-file-path": str(m.runtime / "dht.dat"), "disk-cache": "16M", "console-log-level": "warn", "summary-interval": "0",
+            "log-level": "warn", "log": str(m.runtime / "aria2.log"), **m.options(settings), **m.bt_network_options(settings)}
+    path = m.runtime / "aria2.conf"
     path.write_text("\n".join(k + "=" + v for k, v in conf.items()) + "\n")
     os.chmod(path, 0o600)
     child, qb_child, gateway, aria_lan = None, None, None, None
     try:
         child = subprocess.Popen([str(core_path(m)), "--conf-path=" + str(path)], stdin=subprocess.DEVNULL,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, cwd=m.var)
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, cwd=m.runtime,
+                                 env=dict(os.environ,TMPDIR=str(m.runtime)))
         profile = m.qb.prepare()
-        qb_log = m.var / 'qbittorrent.log'
+        qb_log = m.runtime / 'qbittorrent.log'
         if qb_log.exists() and qb_log.stat().st_size > 2 * 1024 * 1024:
-            os.replace(qb_log, m.var / 'qbittorrent.log.1')
+            os.replace(qb_log, m.runtime / 'qbittorrent.log.1')
         with qb_log.open('a') as output:
             from qb_update import core_path as qb_core_path
             qb_child = subprocess.Popen([str(qb_core_path(m)), '--profile=' + str(profile),
-                                         '--confirm-legal-notice'], stdin=subprocess.DEVNULL, stdout=output, stderr=output, cwd=m.var)
+                                         '--confirm-legal-notice'], stdin=subprocess.DEVNULL, stdout=output, stderr=output, cwd=m.runtime,
+                                         env=dict(os.environ,TMPDIR=str(m.runtime),XDG_CACHE_HOME=str(m.runtime/'qt-cache'),XDG_RUNTIME_DIR=str(m.runtime)))
         for _ in range(20):
             if child.poll() is not None or qb_child.poll() is not None:
                 raise DownloadError("下载核心启动失败，请查看 aria2.log / qbittorrent.log")
@@ -233,7 +235,7 @@ def serve(m):
                 if (m.var / 'tasks.sqlite').stat().st_mtime_ns == sampled_revision:
                     m.sync(remote=remote)
                 try:
-                    status = json.loads((m.var / "tracker-status.json").read_text())
+                    status = json.loads((m.runtime / "tracker-status.json").read_text())
                 except (OSError, ValueError):
                     status = {}
                 s = m.settings()
@@ -270,12 +272,12 @@ def serve(m):
                 child.wait(timeout=20)
             except subprocess.TimeoutExpired:
                 child.kill(); child.wait()
-        (m.var / "service.pid").unlink(missing_ok=True)
+        (m.runtime / "service.pid").unlink(missing_ok=True)
 
 
 def control(m, command):
     m.ready()
-    with (m.var / "lifecycle.lock").open("a") as lock:
+    with (m.runtime / "lifecycle.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         control_locked(m, command)
 
@@ -315,12 +317,13 @@ def control_locked(m, command):
     (m.var / "enabled").touch(mode=0o600)
     if live(m):
         return
-    logfile = m.var / "service.log"
+    logfile = m.runtime / "service.log"
     if logfile.exists() and logfile.stat().st_size > 1024 * 1024:
-        os.replace(logfile, m.var / "service.log.1")
+        os.replace(logfile, m.runtime / "service.log.1")
     with logfile.open("a") as out:
         subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()), "serve", str(m.home)],
-                         stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True, close_fds=True, cwd=m.var)
+                         stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True, close_fds=True, cwd=m.runtime,
+                         env=dict(os.environ,TMPDIR=str(m.runtime)))
 
 
 if __name__ == "__main__":

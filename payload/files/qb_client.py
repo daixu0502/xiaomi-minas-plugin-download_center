@@ -34,7 +34,7 @@ class QB:
         self.m = manager
         self.cookie = ''
         try:
-            saved = json.loads((self.m.var / 'qb-session.json').read_text()).get('cookie', '')
+            saved = json.loads((self.m.runtime / 'qb-session.json').read_text()).get('cookie', '')
             if re.fullmatch(r'(?:SID|QBT_SID_[0-9]+)=[A-Za-z0-9_+/%=\-]+', saved): self.cookie = saved
         except (OSError, ValueError): pass
 
@@ -60,7 +60,7 @@ class QB:
                 cookie = response.headers.get('Set-Cookie', '')
                 if cookie.startswith(('SID=', 'QBT_SID_')):
                     self.cookie = cookie.split(';', 1)[0]
-                    atomic_json(self.m.var / 'qb-session.json', {'cookie': self.cookie})
+                    atomic_json(self.m.runtime / 'qb-session.json', {'cookie': self.cookie})
                 if binary:
                     return value
                 text = value.decode('utf-8')
@@ -117,6 +117,22 @@ class QB:
         profile = self.m.var / 'qb-profile'
         config_dir = profile / 'qBittorrent/config'
         config_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # These two qB directories are disposable; keep BT_backup/config in var.
+        import shutil
+        for name in ('logs', 'GeoDB'):
+            target = self.m.runtime / ('qb-' + name)
+            target.mkdir(mode=0o700, exist_ok=True)
+            link = profile / 'qBittorrent/data' / name
+            link.parent.mkdir(parents=True, exist_ok=True)
+            if link.is_symlink():
+                if link.resolve() != target.resolve():raise DownloadError('qB 缓存链接异常')
+            elif link.exists():
+                for item in link.iterdir():
+                    if item.is_symlink() or not item.is_file() or (target/item.name).exists():
+                        raise DownloadError('qB 缓存含异常或重复文件，未覆盖')
+                    shutil.move(str(item), str(target/item.name))
+                link.rmdir()
+            if not link.is_symlink():link.symlink_to(target, target_is_directory=True)
         secret = self.m.var / 'qb.secret'
         if not secret.exists():
             with secret.open('x') as stream:
@@ -173,4 +189,4 @@ class QB:
         self.request('app/setPreferences', {'json': json.dumps(self.preferences())})
 
     def mark_applied(self):
-        atomic_json(self.m.var / 'qb-applied.json', {k: self.m.settings()[k] for k in QB_DEFAULTS})
+        atomic_json(self.m.runtime / 'qb-applied.json', {k: self.m.settings()[k] for k in QB_DEFAULTS})

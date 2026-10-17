@@ -18,7 +18,7 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 
-VERSION = "1.1.10"
+VERSION = "1.1.11"
 MAX_TORRENT = 4 * 1024 * 1024
 DEFAULTS = {"directory": "", "concurrent": 3, "connections": 4, "downloadKiB": 0,
             "uploadKiB": 1024, "seedRatio": 1.0, "seedMinutes": 60,
@@ -236,6 +236,8 @@ class Manager:
     def __init__(self, home, root, require_mount=True):
         self.home, self.root = Path(home), Path(root)
         self.var = self.home / "var"
+        from plugin_paths import runtime_directory
+        self.runtime = runtime_directory(self.home)
         self.require_mount = require_mount
         self.settings_path = self.var / "settings.json"
 
@@ -252,7 +254,7 @@ class Manager:
     @contextlib.contextmanager
     def locked(self):
         self.ready()
-        with (self.var / "api.lock").open("a") as handle:
+        with (self.runtime / "api.lock").open("a") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             yield
 
@@ -267,9 +269,9 @@ class Manager:
         """Static engine metadata; identity changes invalidate it after a restart."""
         identity = []
         for name in ('service.pid', 'rpc.port', 'qb.port'):
-            try: identity.append((self.var / name).read_text().strip())
+            try: identity.append(((self.runtime if name == 'service.pid' else self.var) / name).read_text().strip())
             except OSError: identity.append('')
-        path = self.var / ('runtime-' + key + '.json')
+        path = self.runtime / ('runtime-' + key + '.json')
         try:
             saved = json.loads(path.read_text())
             value = saved.get('value') if isinstance(saved,dict) else None
@@ -423,7 +425,7 @@ class Manager:
         # Read only our whitelisted startup options; never expose the RPC secret.
         active = self.bt_network_options(dict(DEFAULTS))
         try:
-            for line in (self.var / "aria2.conf").read_text().splitlines():
+            for line in (self.runtime / "aria2.conf").read_text().splitlines():
                 key, sep, value = line.partition("=")
                 if sep and key in active:
                     active[key] = value
@@ -604,11 +606,11 @@ class Manager:
                 s.update(downloadSpeed="0", uploadSpeed="0")
             tasks.append(dict(s, id=row["id"], created=row["created"]))
         try:
-            tracker_status = json.loads((self.var / "tracker-status.json").read_text())
+            tracker_status = json.loads((self.runtime / "tracker-status.json").read_text())
         except (OSError, ValueError):
             tracker_status = {}
         try:
-            job = json.loads((self.var / "job.json").read_text())
+            job = json.loads((self.runtime / "job.json").read_text())
         except (OSError, ValueError):
             job = {}
         result = {"running": running, "error": error, "stats": stats, "tasks": tasks, "version": VERSION,
@@ -1077,7 +1079,7 @@ class Manager:
     def queue_job(self, command):
         self.rpc("getVersion")
         try:
-            previous = json.loads((self.var / "job.json").read_text())
+            previous = json.loads((self.runtime / "job.json").read_text())
         except (OSError, ValueError):
             previous = {}
         if previous.get("state") == "pending":
@@ -1092,14 +1094,14 @@ class Manager:
                 ids.append(row["id"])
         job = {"id": secrets.token_hex(8), "state": "pending", "command": command,
                "remaining": ids, "total": len(ids), "count": 0, "failed": []}
-        atomic_json(self.var / "job.json", job)
+        atomic_json(self.runtime / "job.json", job)
         return {"pending": True, "id": job["id"]}
 
     def process_job(self):
         for _ in range(10):
             with self.locked():
                 try:
-                    job = json.loads((self.var / "job.json").read_text())
+                    job = json.loads((self.runtime / "job.json").read_text())
                 except (OSError, ValueError):
                     return
                 if job.get("state") != "pending":
@@ -1113,7 +1115,7 @@ class Manager:
                         job["count"] += 1
                     except DownloadError as exc:
                         job["failed"].append(str(exc))
-                atomic_json(self.var / "job.json", job)
+                atomic_json(self.runtime / "job.json", job)
 
     def dispatch(self, action, data):
         if action == 'status':
@@ -1184,6 +1186,6 @@ class Manager:
                 if not self.settings()["sources"]:
                     raise DownloadError("请先保存 Tracker 订阅地址")
                 self.rpc("getVersion")
-                atomic_json(self.var / "tracker-status.json", {"state": "pending", "time": time.time(), "message": "正在后台更新"})
+                atomic_json(self.runtime / "tracker-status.json", {"state": "pending", "time": time.time(), "message": "正在后台更新"})
                 return {}
             raise DownloadError("未知操作")
